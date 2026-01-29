@@ -19,9 +19,11 @@ from typing import Any
 
 import numpy as np
 
-# Erdős-specific constants
+# Erdős-specific constants (from TTT-Discover)
 MAX_ERDOS_CONSTRUCTION_LEN = 1000  # Max h_values array length
-MIN_ERDOS_CONSTRUCTION_LEN = 50   # Min h_values array length
+MIN_ERDOS_CONSTRUCTION_LEN = (
+    20  # Min h_values array length (allow smaller than initial)
+)
 
 
 @dataclass
@@ -34,6 +36,7 @@ class ErdosState:
     c5_bound: float | None = None  # The actual overlap bound
     h_values: list[float] | None = None  # The solution array
     code: str = ""  # Code that generated this solution
+    observation: str = ""  # stdout from previous execution (shown in prompt)
     parent_values: list[float] = field(default_factory=list)  # Ancestor values
     parents: list[dict] = field(default_factory=list)  # Parent refs
 
@@ -46,6 +49,7 @@ class ErdosState:
             "c5_bound": self.c5_bound,
             "h_values": self.h_values,
             "code": self.code,
+            "observation": self.observation,
             "parent_values": self.parent_values,
             "parents": self.parents,
         }
@@ -59,21 +63,27 @@ class ErdosState:
             c5_bound=d.get("c5_bound"),
             h_values=d.get("h_values"),
             code=d.get("code", ""),
+            observation=d.get("observation", ""),
             parent_values=d.get("parent_values", []),
             parents=d.get("parents", []),
         )
 
 
 def create_initial_erdos_state() -> ErdosState:
-    """Create an initial random Erdős state."""
-    rng = np.random.default_rng()
-    n_points = rng.integers(100, 300)
+    """Create an initial random Erdős state.
 
-    # Start with h = 0.5 + small perturbation
+    Matches TTT-Discover's initialization:
+    - n_points in [40, 100)
+    - h = 0.5 + zero-centered perturbation in [-0.4, 0.4]
+    """
+    rng = np.random.default_rng()
+    n_points = rng.integers(40, 100)  # Original uses 40-100
+
+    # Start with h = 0.5 + zero-centered perturbation
     h_values = np.ones(n_points) * 0.5
-    perturbation = rng.uniform(-0.3, 0.3, n_points)
-    perturbation = perturbation - np.mean(perturbation)  # Center
-    h_values = np.clip(h_values + perturbation, 0, 1)
+    perturbation = rng.uniform(-0.4, 0.4, n_points)  # Original uses ±0.4
+    perturbation = perturbation - np.mean(perturbation)  # Center to maintain integral
+    h_values = h_values + perturbation  # Don't clip - original doesn't
 
     # Compute initial bound
     j_values = 1.0 - h_values
@@ -197,12 +207,16 @@ class PUCTSampler(StateSampler):
         with open(path) as f:
             data = json.load(f)
         self._states = [ErdosState.from_dict(s) for s in data.get("states", [])]
-        self._initial_states = [ErdosState.from_dict(s) for s in data.get("initial_states", [])]
+        self._initial_states = [
+            ErdosState.from_dict(s) for s in data.get("initial_states", [])
+        ]
         self._n = data.get("puct_n", {})
         self._m = data.get("puct_m", {})
         self._T = data.get("puct_T", 0)
 
-    def _compute_scale(self, values: np.ndarray, mask: np.ndarray | None = None) -> float:
+    def _compute_scale(
+        self, values: np.ndarray, mask: np.ndarray | None = None
+    ) -> float:
         """Compute value scale for PUCT bonus normalization.
 
         Args:
@@ -238,7 +252,9 @@ class PUCTSampler(StateSampler):
                     children_map[parent_id].append(s.id)
         return children_map
 
-    def _get_full_lineage(self, state: ErdosState, children_map: dict[str, list[str]]) -> set[str]:
+    def _get_full_lineage(
+        self, state: ErdosState, children_map: dict[str, list[str]]
+    ) -> set[str]:
         """Get full lineage: ancestors + descendants (to avoid sampling related states)."""
         lineage = {state.id}
 
@@ -289,10 +305,9 @@ class PUCTSampler(StateSampler):
             return picked
 
         # Get values
-        values = np.array([
-            s.value if s.value is not None else float("-inf")
-            for s in self._states
-        ])
+        values = np.array(
+            [s.value if s.value is not None else float("-inf") for s in self._states]
+        )
 
         # Build mask for non-initial states (for scale computation)
         initial_ids = {s.id for s in self._initial_states}
@@ -300,8 +315,7 @@ class PUCTSampler(StateSampler):
 
         # Compute scale excluding initial states (if any non-initial exist)
         scale = self._compute_scale(
-            values,
-            non_initial_mask if non_initial_mask.any() else None
+            values, non_initial_mask if non_initial_mask.any() else None
         )
         self._last_scale = scale
         P = self._compute_prior(values)
@@ -390,7 +404,9 @@ class PUCTSampler(StateSampler):
             parent = parent_map.get(pid)
             anc_ids = [pid]
             if parent and parent.parents:
-                anc_ids.extend(str(p.get("id", "")) for p in parent.parents if p.get("id"))
+                anc_ids.extend(
+                    str(p.get("id", "")) for p in parent.parents if p.get("id")
+                )
 
             # Increment visit counts for parent AND all ancestors
             for aid in anc_ids:
@@ -414,7 +430,11 @@ class PUCTSampler(StateSampler):
                 continue
 
             # Validate construction length
-            if not (MIN_ERDOS_CONSTRUCTION_LEN <= len(child.h_values) <= MAX_ERDOS_CONSTRUCTION_LEN):
+            if not (
+                MIN_ERDOS_CONSTRUCTION_LEN
+                <= len(child.h_values)
+                <= MAX_ERDOS_CONSTRUCTION_LEN
+            ):
                 continue
 
             key = tuple(child.h_values)
@@ -422,8 +442,12 @@ class PUCTSampler(StateSampler):
                 continue
 
             # Set parent info
-            child.parent_values = [parent.value] + parent.parent_values if parent.value else []
-            child.parents = [{"id": parent.id, "timestep": parent.timestep}] + parent.parents
+            child.parent_values = (
+                [parent.value] + parent.parent_values if parent.value else []
+            )
+            child.parents = [
+                {"id": parent.id, "timestep": parent.timestep}
+            ] + parent.parents
             new_states.append(child)
             existing_keys.add(key)
 
@@ -472,7 +496,9 @@ class PUCTSampler(StateSampler):
             return
 
         # Sort by value (descending)
-        values = [s.value if s.value is not None else float("-inf") for s in self._states]
+        values = [
+            s.value if s.value is not None else float("-inf") for s in self._states
+        ]
         indices = np.argsort(values)[::-1]
 
         # Always keep initial states
@@ -501,7 +527,10 @@ class PUCTSampler(StateSampler):
         """Get the best state in the buffer."""
         if not self._states:
             return None
-        best = max(self._states, key=lambda s: s.value if s.value is not None else float("-inf"))
+        best = max(
+            self._states,
+            key=lambda s: s.value if s.value is not None else float("-inf"),
+        )
         return best
 
     def get_stats(self) -> dict[str, Any]:
@@ -547,7 +576,9 @@ class GreedySampler(StateSampler):
                 result.append(np.random.choice(self._states))
             else:
                 # Return best
-                best = max(self._states, key=lambda s: s.value if s.value else float("-inf"))
+                best = max(
+                    self._states, key=lambda s: s.value if s.value else float("-inf")
+                )
                 result.append(best)
         return result
 
@@ -560,12 +591,18 @@ class GreedySampler(StateSampler):
         with self._lock:
             for child, parent in zip(states, parent_states):
                 if child.value is not None:
-                    child.parent_values = [parent.value] + parent.parent_values if parent.value else []
-                    child.parents = [{"id": parent.id, "timestep": parent.timestep}] + parent.parents
+                    child.parent_values = (
+                        [parent.value] + parent.parent_values if parent.value else []
+                    )
+                    child.parents = [
+                        {"id": parent.id, "timestep": parent.timestep}
+                    ] + parent.parents
                     self._states.append(child)
 
             # Keep top states
-            self._states.sort(key=lambda s: s.value if s.value else float("-inf"), reverse=True)
+            self._states.sort(
+                key=lambda s: s.value if s.value else float("-inf"), reverse=True
+            )
             self._states = self._states[: self.max_buffer_size]
 
     def flush(self, step: int | None = None):

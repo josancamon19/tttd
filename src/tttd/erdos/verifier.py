@@ -1,73 +1,62 @@
 """Erdős Minimum Overlap verifier.
 
-Ported from TTT-Discover's tasks/erdos_min_overlap/verifier.py.
-Evaluates solutions to the Erdős minimum overlap problem.
+Exact copy from TTT-Discover's tasks/erdos_min_overlap/verifier.py.
 """
 
 import numpy as np
 
 
-def verify_c5_solution(h_values: np.ndarray, c5_bound: float, n_points: int) -> bool:
-    """Verify that the solution is valid.
+def verify_c5_solution(h_values: np.ndarray, c5_achieved: float, n_points: int):
+    if not isinstance(h_values, np.ndarray):
+        try:
+            h_values = np.array(h_values, dtype=np.float64)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Cannot convert h_values to numpy array: {e}")
 
-    Args:
-        h_values: Array of h values in [0, 1], length n_points
-        c5_bound: The claimed C5 bound
-        n_points: Number of discretization points
+    if len(h_values.shape) != 1:
+        raise ValueError(f"h_values must be 1D array, got shape {h_values.shape}")
 
-    Returns:
-        True if valid, False otherwise
-    """
-    if len(h_values) != n_points:
-        return False
-    if not np.all((h_values >= 0) & (h_values <= 1)):
-        return False
-    if c5_bound <= 0 or np.isnan(c5_bound) or np.isinf(c5_bound):
-        return False
-    return True
+    if h_values.shape[0] != n_points:
+        raise ValueError(f"Expected h shape ({n_points},), got {h_values.shape}")
+
+    if not np.all(np.isfinite(h_values)):
+        raise ValueError("h_values contain NaN or inf values")
+
+    if np.any(h_values < 0) or np.any(h_values > 1):
+        raise ValueError(
+            f"h(x) is not in [0, 1]. Range: [{h_values.min()}, {h_values.max()}]"
+        )
+
+    n = n_points
+    target_sum = n / 2.0
+    current_sum = np.sum(h_values)
+
+    if current_sum != target_sum:
+        h_values = h_values * (target_sum / current_sum)
+        if np.any(h_values < 0) or np.any(h_values > 1):
+            raise ValueError(
+                f"After normalization, h(x) is not in [0, 1]. Range: [{h_values.min()}, {h_values.max()}]"
+            )
+
+    dx = 2.0 / n_points
+
+    j_values = 1.0 - h_values
+    correlation = np.correlate(h_values, j_values, mode="full") * dx
+    computed_c5 = np.max(correlation)
+
+    if not np.isfinite(computed_c5):
+        raise ValueError(f"Computed C5 is not finite: {computed_c5}")
+
+    if not np.isclose(computed_c5, c5_achieved, atol=1e-4):
+        raise ValueError(
+            f"C5 mismatch: reported {c5_achieved:.6f}, computed {computed_c5:.6f}"
+        )
+
+    return computed_c5
 
 
 def evaluate_erdos_solution(
-    h_values: np.ndarray,
-    c5_bound: float,
-    n_points: int,
+    h_values: np.ndarray, c5_bound: float, n_points: int
 ) -> float:
-    """Evaluate an Erdős minimum overlap solution.
-
-    The Erdős minimum overlap problem asks: given a sequence of length n,
-    what is the minimum overlap when the sequence is shifted?
-
-    We discretize the problem: h(x) for x in [0,1] represents the "height"
-    function. The overlap is computed via correlation of h and (1-h).
-
-    Args:
-        h_values: Array of h values in [0, 1], shape (n_points,)
-        c5_bound: The claimed C5 bound (overlap)
-        n_points: Number of discretization points
-
-    Returns:
-        The actual C5 bound (overlap value). Lower is better.
-    """
-    if not verify_c5_solution(h_values, c5_bound, n_points):
-        return float('inf')
-
-    h_values = np.asarray(h_values, dtype=np.float64)
-
-    # Compute j_values = 1 - h_values
-    j_values = 1.0 - h_values
-
-    # Discretization step
-    dx = 2.0 / n_points
-
-    # Compute the correlation (overlap) via convolution
-    # The overlap at shift t is integral of h(x) * j(x + t) dx
-    correlation = np.correlate(h_values, j_values, mode="full") * dx
-
-    # The C5 bound is the maximum overlap
-    c5_actual = float(np.max(correlation))
-
-    return c5_actual
-
-
-# Known good solutions for reference
-KNOWN_BEST_BOUND = 0.380926  # Approximate best known value
+    verify_c5_solution(h_values, c5_bound, n_points)
+    return float(c5_bound)

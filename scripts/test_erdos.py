@@ -6,6 +6,8 @@ import logging
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -14,6 +16,9 @@ logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Configure pytest-asyncio
+pytestmark = pytest.mark.anyio
 
 
 def test_verifier():
@@ -34,14 +39,15 @@ def test_verifier():
     logger.info(f"Trivial solution (h=0.5): c5_bound = {c5_bound:.6f}")
     assert 0.49 < c5_bound < 0.51, f"Expected ~0.5, got {c5_bound}"
 
-    # Verify
-    assert verify_c5_solution(h_values, c5_bound, n_points)
+    # Verify - now returns computed value or raises
+    computed = verify_c5_solution(h_values, c5_bound, n_points)
+    assert abs(computed - c5_bound) < 1e-4
     actual = evaluate_erdos_solution(h_values, c5_bound, n_points)
     logger.info(f"Verified c5_bound = {actual:.6f}")
 
     # Test 2: Step function (should be better)
     h_step = np.zeros(n_points)
-    h_step[:n_points//2] = 1.0
+    h_step[: n_points // 2] = 1.0
     j_step = 1.0 - h_step
     corr_step = np.correlate(h_step, j_step, mode="full") * dx
     c5_step = float(np.max(corr_step))
@@ -60,7 +66,7 @@ def test_executor():
     from tttd.erdos.executor import run_erdos_eval, extract_code_block
 
     # Test code extraction
-    text = '''
+    text = """
 Here is my solution:
 
 ```python
@@ -77,7 +83,7 @@ def run():
 ```
 
 This gives a bound of 0.5.
-'''
+"""
     code = extract_code_block(text)
     assert code is not None
     assert "def run" in code
@@ -91,6 +97,7 @@ This gives a bound of 0.5.
     logger.info(f"✓ Executor works, c5_bound = {result['c5_bound']:.6f}\n")
 
 
+@pytest.mark.anyio
 async def test_env():
     """Test the Erdős environment."""
     logger.info("=== Testing Environment ===")
@@ -98,7 +105,8 @@ async def test_env():
     from tinker_cookbook.renderers import get_renderer
     from tinker_cookbook.tokenizer_utils import get_tokenizer
 
-    from tttd.erdos.env import ErdosEnv, ErdosState
+    from tttd.erdos.env import ErdosEnv
+    from tttd.sampler import ErdosState
 
     # Create environment
     tokenizer = get_tokenizer("Qwen/Qwen3-8B")
@@ -113,6 +121,7 @@ async def test_env():
     logger.info("✓ Environment initial observation works\n")
 
 
+@pytest.mark.anyio
 async def test_single_rollout():
     """Test a single rollout with mock action."""
     logger.info("=== Testing Single Rollout ===")
@@ -132,7 +141,7 @@ async def test_single_rollout():
     obs, stop_cond = await env.initial_observation()
 
     # Create a mock action (simulating LLM output)
-    mock_response = '''I'll create a solution using a step function approach.
+    mock_response = """I'll create a solution using a step function approach.
 
 ```python
 import numpy as np
@@ -155,7 +164,7 @@ def run():
 ```
 
 This step function should give a bound around 0.48.
-'''
+"""
     # Encode the response - Action is just list[int]
     action: Action = tokenizer.encode(mock_response)
 
@@ -178,7 +187,7 @@ def test_baseline_solution():
     from tttd.erdos.executor import run_erdos_eval
 
     # A slightly better construction
-    code = '''
+    code = """
 import numpy as np
 from scipy.optimize import minimize
 
@@ -208,30 +217,31 @@ def run():
     c5_bound = result.fun
 
     return h_values, c5_bound, n_points
-'''
+"""
 
     result = run_erdos_eval(code, timeout=60)
     logger.info(f"Optimized result: {result['msg']}")
 
     if result["success"]:
-        logger.info(f"✓ Baseline optimization works, c5_bound = {result['c5_bound']:.6f}")
+        logger.info(
+            f"✓ Baseline optimization works, c5_bound = {result['c5_bound']:.6f}"
+        )
     else:
-        logger.warning(f"Baseline optimization failed (scipy may not be installed): {result['msg']}")
+        logger.warning(
+            f"Baseline optimization failed (scipy may not be installed): {result['msg']}"
+        )
         logger.info("Trying simpler baseline...")
 
         # Simpler baseline without scipy
-        simple_code = '''
+        # Must satisfy sum(h) = n_points / 2
+        simple_code = """
 import numpy as np
 
 def run():
     n_points = 200
 
-    # Manual step function that's reasonably good
-    h_values = np.zeros(n_points)
-    # Asymmetric step
-    cutoff = int(0.38 * n_points)
-    h_values[:cutoff] = 0.9
-    h_values[cutoff:] = 0.1
+    # Simple uniform h = 0.5 satisfies constraint sum(h) = 100
+    h_values = np.ones(n_points) * 0.5
 
     j_values = 1.0 - h_values
     dx = 2.0 / n_points
@@ -239,7 +249,7 @@ def run():
     c5_bound = float(np.max(correlation))
 
     return h_values, c5_bound, n_points
-'''
+"""
         result = run_erdos_eval(simple_code, timeout=30)
         logger.info(f"Simple baseline: {result['msg']}")
         assert result["success"]
@@ -268,7 +278,9 @@ def test_puct_sampler():
         assert len(states) == 3
         for s in states:
             assert s.h_values is not None
-            logger.info(f"  State {s.id[:8]}... value={s.value:.4f}, c5_bound={s.c5_bound:.4f}")
+            logger.info(
+                f"  State {s.id[:8]}... value={s.value:.4f}, c5_bound={s.c5_bound:.4f}"
+            )
 
         # Simulate rollout: create child states
         parent = states[0]
@@ -296,7 +308,9 @@ def test_puct_sampler():
 
         # Check stats
         stats = sampler.get_stats()
-        logger.info(f"Sampler stats: buffer_size={stats['puct/buffer_size']}, T={stats['puct/T']}")
+        logger.info(
+            f"Sampler stats: buffer_size={stats['puct/buffer_size']}, T={stats['puct/T']}"
+        )
         assert stats["puct/buffer_size"] > 1
         assert stats["puct/T"] >= 1
 
@@ -330,7 +344,9 @@ def test_puct_advanced():
         sampler.record_failed_rollout(parent)
 
         assert sampler._T == initial_T + 1, "T should increment on failed rollout"
-        assert sampler._n.get(parent.id, 0) == initial_n + 1, "n should increment on failed rollout"
+        assert sampler._n.get(parent.id, 0) == initial_n + 1, (
+            "n should increment on failed rollout"
+        )
         logger.info("  ✓ record_failed_rollout increments T and n")
 
         # Test 2: Ancestor visit count propagation
@@ -379,8 +395,9 @@ def test_puct_advanced():
         sampled = sampler2.sample_states(1)[0]
         if sampled.id == initial.id:
             # The h_values should be different after refresh
-            assert sampled.h_values != original_h or len(sampler2._states) == 1, \
+            assert sampled.h_values != original_h or len(sampler2._states) == 1, (
                 "Initial state should be refreshed with new h_values"
+            )
         logger.info("  ✓ Initial states refresh when re-sampled")
 
         # Test 4: Full lineage blocking
@@ -390,13 +407,19 @@ def test_puct_advanced():
         # Create a tree: root -> child1 -> grandchild
         root = sampler3._states[0]
         child1 = ErdosState(
-            timestep=0, value=-0.45, c5_bound=0.45,
-            h_values=[0.55] * 100, code="# c1",
+            timestep=0,
+            value=-0.45,
+            c5_bound=0.45,
+            h_values=[0.55] * 100,
+            code="# c1",
             parents=[{"id": root.id, "timestep": -1}],
         )
         grandchild = ErdosState(
-            timestep=1, value=-0.40, c5_bound=0.40,
-            h_values=[0.60] * 100, code="# gc",
+            timestep=1,
+            value=-0.40,
+            c5_bound=0.40,
+            h_values=[0.60] * 100,
+            code="# gc",
             parents=[{"id": child1.id, "timestep": 0}, {"id": root.id, "timestep": -1}],
         )
         sampler3._states.extend([child1, grandchild])
@@ -417,7 +440,6 @@ def test_advantages():
     """Test the advantage estimators."""
     logger.info("=== Testing Advantage Estimators ===")
 
-    import torch
     from tinker_cookbook.rl.types import TrajectoryGroup, Trajectory, Transition
     from tinker_cookbook.completers import TokensWithLogprobs
     import tinker
@@ -454,13 +476,19 @@ def test_advantages():
     logger.info(f"Entropic (beta=1.0) advantages: {adv_entropic.tolist()}")
 
     # Test entropic with adaptive beta
-    adv_adaptive = compute_advantages([traj_group], estimator="entropic_adaptive_beta")[0]
+    adv_adaptive = compute_advantages([traj_group], estimator="entropic_adaptive_beta")[
+        0
+    ]
     logger.info(f"Entropic adaptive advantages: {adv_adaptive.tolist()}")
 
     # Higher rewards should have higher advantages
     assert adv_mean[3] > adv_mean[0], "Higher reward should have higher advantage"
-    assert adv_entropic[3] > adv_entropic[0], "Higher reward should have higher advantage"
-    assert adv_adaptive[3] > adv_adaptive[0], "Higher reward should have higher advantage"
+    assert adv_entropic[3] > adv_entropic[0], (
+        "Higher reward should have higher advantage"
+    )
+    assert adv_adaptive[3] > adv_adaptive[0], (
+        "Higher reward should have higher advantage"
+    )
 
     logger.info("✓ Advantage estimators work\n")
 
