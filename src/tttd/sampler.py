@@ -276,15 +276,18 @@ class PUCTSampler(StateSampler):
         return lineage
 
     def _refresh_random_construction(self, state: ErdosState):
-        """Re-randomize the h_values for an initial state when re-sampled."""
-        rng = np.random.default_rng()
-        n_points = len(state.h_values) if state.h_values else rng.integers(100, 300)
+        """Re-randomize the h_values for an initial state when re-sampled.
 
-        # Generate new random h_values
+        Matches TTT-Discover's create_initial_state for erdos (no clipping).
+        """
+        rng = np.random.default_rng()
+        n_points = len(state.h_values) if state.h_values else rng.integers(40, 100)
+
+        # Generate new random h_values (matching TTT-Discover exactly)
         h_values = np.ones(n_points) * 0.5
-        perturbation = rng.uniform(-0.3, 0.3, n_points)
+        perturbation = rng.uniform(-0.4, 0.4, n_points)  # ±0.4 like original
         perturbation = perturbation - np.mean(perturbation)
-        h_values = np.clip(h_values + perturbation, 0, 1)
+        h_values = h_values + perturbation  # No clipping - matches original
 
         # Recompute bound
         j_values = 1.0 - h_values
@@ -547,19 +550,25 @@ class PUCTSampler(StateSampler):
 
 
 class GreedySampler(StateSampler):
-    """Simple greedy sampler - always returns best state with epsilon exploration."""
+    """Epsilon-greedy sampler that keeps top-k best states by value.
+
+    Matches TTT-Discover's GreedySampler implementation.
+    """
 
     def __init__(
         self,
         log_path: str,
-        max_buffer_size: int = 100,
-        epsilon: float = 0.1,
+        max_buffer_size: int = 1000,  # TTT-Discover batch_size default
+        epsilon: float = 0.125,  # TTT-Discover default
+        topk_children: int = 1,  # TTT-Discover default
     ):
         self.log_path = log_path
         self.max_buffer_size = max_buffer_size
         self.epsilon = epsilon
+        self.topk_children = topk_children
         self._states: list[ErdosState] = []
         self._lock = threading.Lock()
+        self._current_step = 0
 
         Path(log_path).mkdir(parents=True, exist_ok=True)
 
@@ -582,12 +591,62 @@ class GreedySampler(StateSampler):
                 result.append(best)
         return result
 
+    def _save_path(self, step: int) -> str:
+        return os.path.join(self.log_path, f"greedy_sampler_step_{step:06d}.json")
+
+    def _save(self, step: int):
+        """Save sampler state to disk."""
+        if not self._states:
+            return
+        data = {
+            "step": step,
+            "states": [s.to_dict() for s in self._states],
+        }
+        path = self._save_path(step)
+        with open(path, "w") as f:
+            json.dump(data, f)
+
+    def _filter_topk_per_parent(
+        self,
+        states: list[ErdosState],
+        parent_states: list[ErdosState],
+    ) -> tuple[list[ErdosState], list[ErdosState]]:
+        """Keep only top-k children per parent (by value)."""
+        if self.topk_children <= 0 or not states:
+            return states, parent_states
+
+        # Group by parent
+        parent_to_children: dict[str, list[tuple[ErdosState, ErdosState]]] = {}
+        for child, parent in zip(states, parent_states):
+            pid = parent.id
+            if pid not in parent_to_children:
+                parent_to_children[pid] = []
+            parent_to_children[pid].append((child, parent))
+
+        # Keep top-k per parent
+        filtered_children = []
+        filtered_parents = []
+        for children in parent_to_children.values():
+            sorted_pairs = sorted(
+                children,
+                key=lambda x: x[0].value if x[0].value is not None else float("-inf"),
+                reverse=True,
+            )
+            for child, parent in sorted_pairs[: self.topk_children]:
+                filtered_children.append(child)
+                filtered_parents.append(parent)
+
+        return filtered_children, filtered_parents
+
     def update_states(
         self,
         states: list[ErdosState],
         parent_states: list[ErdosState],
         step: int | None = None,
     ):
+        # Filter to top-k children per parent (like TTT-Discover)
+        states, parent_states = self._filter_topk_per_parent(states, parent_states)
+
         with self._lock:
             for child, parent in zip(states, parent_states):
                 if child.value is not None:
@@ -605,8 +664,16 @@ class GreedySampler(StateSampler):
             )
             self._states = self._states[: self.max_buffer_size]
 
+            if step is not None:
+                self._current_step = step
+                self._save(step)
+
     def flush(self, step: int | None = None):
-        pass
+        """Force save to disk."""
+        with self._lock:
+            if step is not None:
+                self._current_step = step
+            self._save(self._current_step)
 
     def get_best_state(self) -> ErdosState | None:
         if not self._states:

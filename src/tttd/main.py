@@ -45,12 +45,14 @@ class TrainConfig:
     loss_fn: Literal["importance_sampling", "ppo"] = "importance_sampling"
     num_substeps: int = 1
     kl_penalty_coef: float = 0.0
-    eval_every: int = 3  # TTT-Discover eval_every=3
+    eval_every: int = 3  # TTT-Discover default; runs evaluators every N steps
     save_every: int = 5
     remove_constant_reward_groups: bool = True
 
     # Advantage estimation - TTT-Discover uses entropic with beta=2.0
-    adv_estimator: Literal["mean_baseline", "entropic", "entropic_adaptive_beta"] = "entropic"
+    adv_estimator: Literal["mean_baseline", "entropic", "entropic_adaptive_beta"] = (
+        "entropic"
+    )
     adv_estimator_beta: float = 2.0  # TTT-Discover uses beta=2.0
 
     # Output settings

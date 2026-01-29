@@ -119,7 +119,7 @@ class ErdosDatasetBuilder(RLDatasetBuilder):
     timeout: int = 60
 
     # Sampler config
-    log_path: str = "/tmp/tttd-erdos"
+    log_path: str = "./tmp/tttd-erdos"
     sampler_type: str = "puct"  # "puct" or "greedy"
     puct_c: float = 1.0
     max_buffer_size: int = 500
@@ -145,6 +145,7 @@ class ErdosDatasetBuilder(RLDatasetBuilder):
             sampler = GreedySampler(
                 log_path=self.log_path,
                 max_buffer_size=self.max_buffer_size,
+                topk_children=self.topk_children,
             )
         else:
             raise ValueError(f"Unknown sampler_type: {self.sampler_type}")
