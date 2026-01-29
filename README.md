@@ -8,7 +8,7 @@ Just much cleaner.
 
 ## Paper
 
-[Test-Time Training for Deep Learning-Based Signal Processing](https://arxiv.org/abs/2505.14644)
+https://arxiv.org/abs/2505.14644
 
 ## Usage
 

@@ -131,7 +131,11 @@ class ErdosGame(Scene):
         # The objective
         objective = VGroup(
             Text("YOUR GOAL:", font_size=24, color=WHITE),
-            MathTex(r"\min_h \max_r \text{overlap}(h, r)", font_size=36, color=HIGHLIGHT_COLOR),
+            MathTex(
+                r"\min_h \max_r \text{overlap}(h, r)",
+                font_size=36,
+                color=HIGHLIGHT_COLOR,
+            ),
         ).arrange(RIGHT, buff=0.3)
         objective.to_edge(DOWN, buff=0.8)
 
@@ -139,17 +143,21 @@ class ErdosGame(Scene):
         self.wait(1)
 
         # Emphasize minimax
-        minimax_text = Text("← Minimax: you minimize, adversary maximizes",
-                           font_size=20, color=GREY_B)
+        minimax_text = Text(
+            "← Minimax: you minimize, adversary maximizes", font_size=20, color=GREY_B
+        )
         minimax_text.next_to(objective, DOWN, buff=0.2)
         self.play(FadeIn(minimax_text))
         self.wait(1.5)
 
         # Cleanup
         self.play(
-            FadeOut(title), FadeOut(setup_text), FadeOut(boxes),
-            FadeOut(objective), FadeOut(minimax_text),
-            run_time=0.8
+            FadeOut(title),
+            FadeOut(setup_text),
+            FadeOut(boxes),
+            FadeOut(objective),
+            FadeOut(minimax_text),
+            run_time=0.8,
         )
 
     def scene2_what_is_rotation(self):
@@ -185,13 +193,17 @@ class ErdosGame(Scene):
 
         self.play(
             LaggedStart(*[GrowFromEdge(bar, DOWN) for bar in bars], lag_ratio=0.1),
-            run_time=1
+            run_time=1,
         )
         self.play(FadeIn(index_labels), FadeIn(value_labels), FadeIn(adv_label))
         self.wait(0.5)
 
         # Explain rotation
-        explain = Text("Rotation = shift all values cyclically →", font_size=24, color=HIGHLIGHT_COLOR)
+        explain = Text(
+            "Rotation = shift all values cyclically →",
+            font_size=24,
+            color=HIGHLIGHT_COLOR,
+        )
         explain.next_to(title, DOWN, buff=0.4)
         self.play(Write(explain))
         self.wait(0.5)
@@ -208,7 +220,7 @@ class ErdosGame(Scene):
                 start=bars.get_right() + RIGHT * 0.3,
                 end=bars.get_left() + LEFT * 0.3,
                 color=HIGHLIGHT_COLOR,
-                stroke_width=3
+                stroke_width=3,
             )
             arrow.shift(UP * 2.5)
 
@@ -220,7 +232,9 @@ class ErdosGame(Scene):
 
             # Animate bars shifting
             # Create new bars at new positions
-            new_bars = self.create_bars(j_rotated, ADVERSARY_COLOR, bar_width=0.6, max_height=2.0)
+            new_bars = self.create_bars(
+                j_rotated, ADVERSARY_COLOR, bar_width=0.6, max_height=2.0
+            )
             new_bars.move_to(ORIGIN)
 
             new_value_labels = VGroup()
@@ -246,7 +260,7 @@ class ErdosGame(Scene):
             self.play(
                 Transform(bars, new_bars),
                 Transform(value_labels, new_value_labels),
-                run_time=0.7
+                run_time=0.7,
             )
             self.wait(0.3)
 
@@ -258,13 +272,12 @@ class ErdosGame(Scene):
         self.wait(0.5)
 
         # Now explain WHY adversary rotates
-        why_title = Text("WHY does adversary rotate?", font_size=28, color=HIGHLIGHT_COLOR)
+        why_title = Text(
+            "WHY does adversary rotate?", font_size=28, color=HIGHLIGHT_COLOR
+        )
         why_title.next_to(explain, DOWN, buff=0.4)
 
-        self.play(
-            FadeOut(rot_label),
-            Write(why_title)
-        )
+        self.play(FadeOut(rot_label), Write(why_title))
 
         # Show the goal
         goal_box = VGroup(
@@ -278,17 +291,25 @@ class ErdosGame(Scene):
         self.wait(1)
 
         # Emphasize
-        max_emphasis = Text("They're searching for your WEAKNESS", font_size=26, color=BAD_COLOR)
+        max_emphasis = Text(
+            "They're searching for your WEAKNESS", font_size=26, color=BAD_COLOR
+        )
         max_emphasis.next_to(goal_box, DOWN, buff=0.3)
         self.play(Write(max_emphasis))
         self.wait(1.5)
 
         # Cleanup
         self.play(
-            FadeOut(title), FadeOut(explain), FadeOut(bars),
-            FadeOut(index_labels), FadeOut(value_labels), FadeOut(adv_label),
-            FadeOut(why_title), FadeOut(goal_box), FadeOut(max_emphasis),
-            run_time=0.8
+            FadeOut(title),
+            FadeOut(explain),
+            FadeOut(bars),
+            FadeOut(index_labels),
+            FadeOut(value_labels),
+            FadeOut(adv_label),
+            FadeOut(why_title),
+            FadeOut(goal_box),
+            FadeOut(max_emphasis),
+            run_time=0.8,
         )
 
     def scene3_overlap_mechanics(self):
@@ -317,8 +338,10 @@ class ErdosGame(Scene):
             your_values.add(lbl)
 
         self.play(
-            LaggedStart(*[GrowFromEdge(bar, DOWN) for bar in your_bars], lag_ratio=0.08),
-            run_time=1
+            LaggedStart(
+                *[GrowFromEdge(bar, DOWN) for bar in your_bars], lag_ratio=0.08
+            ),
+            run_time=1,
         )
         self.play(FadeIn(your_label), FadeIn(your_values))
         self.wait(0.5)
@@ -338,7 +361,7 @@ class ErdosGame(Scene):
 
         self.play(
             LaggedStart(*[GrowFromEdge(bar, DOWN) for bar in adv_bars], lag_ratio=0.08),
-            run_time=1
+            run_time=1,
         )
         self.play(FadeIn(adv_label), FadeIn(adv_values))
         self.wait(0.5)
@@ -346,15 +369,16 @@ class ErdosGame(Scene):
         # Show the overlap formula
         formula = MathTex(
             r"\text{overlap}(r) = \frac{1}{n}\sum_{i=0}^{n-1} h_i \cdot j_{(i+r) \bmod n}",
-            font_size=28
+            font_size=28,
         )
         formula.to_edge(DOWN, buff=0.5)
         self.play(Write(formula), run_time=1)
         self.wait(0.8)
 
         # Now show overlap visualization - bring bars together
-        explanation = Text("Let's see the overlap at rotation r=0...",
-                          font_size=22, color=GREY_B)
+        explanation = Text(
+            "Let's see the overlap at rotation r=0...", font_size=22, color=GREY_B
+        )
         explanation.next_to(title, DOWN, buff=0.3)
         self.play(Write(explanation))
 
@@ -367,9 +391,11 @@ class ErdosGame(Scene):
         self.play(
             your_bars.animate.move_to(center_pos + LEFT * 0.15),
             adv_bars.animate.move_to(center_pos + RIGHT * 0.15),
-            FadeOut(your_label), FadeOut(adv_label),
-            FadeOut(your_values), FadeOut(adv_values),
-            run_time=1
+            FadeOut(your_label),
+            FadeOut(adv_label),
+            FadeOut(your_values),
+            FadeOut(adv_values),
+            run_time=1,
         )
         self.wait(0.3)
 
@@ -380,28 +406,35 @@ class ErdosGame(Scene):
         product_labels = VGroup()
         for i, (ybar, abar, prod) in enumerate(zip(your_bars, adv_bars, products)):
             # Highlight the multiplication
-            prod_text = MathTex(f"{h[i]:.1f} \\times {j[i]:.1f} = {prod:.2f}", font_size=16)
+            prod_text = MathTex(
+                f"{h[i]:.1f} \\times {j[i]:.1f} = {prod:.2f}", font_size=16
+            )
             prod_text.next_to(VGroup(ybar, abar), UP, buff=0.3)
             product_labels.add(prod_text)
 
         self.play(
-            LaggedStart(*[FadeIn(p, shift=DOWN*0.2) for p in product_labels], lag_ratio=0.1),
-            run_time=1.5
+            LaggedStart(
+                *[FadeIn(p, shift=DOWN * 0.2) for p in product_labels], lag_ratio=0.1
+            ),
+            run_time=1.5,
         )
         self.wait(0.5)
 
         # Show sum
         overlap_text = MathTex(
             f"\\text{{overlap}}(0) = \\frac{{1}}{{6}}({' + '.join([f'{p:.2f}' for p in products])}) = {overlap_r0:.3f}",
-            font_size=24
+            font_size=24,
         )
         overlap_text.next_to(product_labels, UP, buff=0.3)
         self.play(Write(overlap_text), run_time=1)
         self.wait(1)
 
         # Now show rotation
-        rotate_text = Text("But adversary can ROTATE to find worst case...",
-                          font_size=22, color=HIGHLIGHT_COLOR)
+        rotate_text = Text(
+            "But adversary can ROTATE to find worst case...",
+            font_size=22,
+            color=HIGHLIGHT_COLOR,
+        )
         rotate_text.next_to(title, DOWN, buff=0.3)
         self.play(ReplacementTransform(explanation, rotate_text))
         self.wait(0.5)
@@ -411,7 +444,9 @@ class ErdosGame(Scene):
         worst_r = np.argmax(overlaps)
 
         # Show adversary searching indicator
-        search_label = Text("Adversary searching for MAX...", font_size=22, color=ADVERSARY_COLOR)
+        search_label = Text(
+            "Adversary searching for MAX...", font_size=22, color=ADVERSARY_COLOR
+        )
         search_label.to_edge(RIGHT, buff=0.5).shift(UP * 2)
         self.play(FadeIn(search_label))
 
@@ -421,7 +456,11 @@ class ErdosGame(Scene):
 
         best_indicator = VGroup(
             Text("Best found:", font_size=18, color=GREY_B),
-            Text(f"r={best_r_so_far}: {best_so_far:.3f}", font_size=20, color=ADVERSARY_COLOR)
+            Text(
+                f"r={best_r_so_far}: {best_so_far:.3f}",
+                font_size=20,
+                color=ADVERSARY_COLOR,
+            ),
         ).arrange(DOWN, buff=0.1)
         best_indicator.next_to(search_label, DOWN, buff=0.3)
         self.play(FadeIn(best_indicator))
@@ -438,7 +477,10 @@ class ErdosGame(Scene):
 
             new_product_labels = VGroup()
             for i, (ybar, prod) in enumerate(zip(your_bars, new_products)):
-                prod_text = MathTex(f"{h[i]:.1f} \\times {j_rot[i]:.1f} = {new_products[i]:.2f}", font_size=16)
+                prod_text = MathTex(
+                    f"{h[i]:.1f} \\times {j_rot[i]:.1f} = {new_products[i]:.2f}",
+                    font_size=16,
+                )
                 prod_text.next_to(ybar, UP, buff=0.3)
                 new_product_labels.add(prod_text)
 
@@ -446,9 +488,7 @@ class ErdosGame(Scene):
             is_new_best = new_overlap > best_so_far
             color = ADVERSARY_COLOR if is_new_best else GREY_B
             new_overlap_text = MathTex(
-                f"\\text{{overlap}}({r}) = {new_overlap:.3f}",
-                font_size=28,
-                color=color
+                f"\\text{{overlap}}({r}) = {new_overlap:.3f}", font_size=28, color=color
             )
             new_overlap_text.next_to(new_product_labels, UP, buff=0.3)
 
@@ -456,7 +496,7 @@ class ErdosGame(Scene):
                 Transform(adv_bars, new_adv_bars),
                 Transform(product_labels, new_product_labels),
                 Transform(overlap_text, new_overlap_text),
-                run_time=0.5
+                run_time=0.5,
             )
 
             # Update best if this is better for adversary
@@ -465,18 +505,24 @@ class ErdosGame(Scene):
                 best_r_so_far = r
                 new_best_indicator = VGroup(
                     Text("Best found:", font_size=18, color=GREY_B),
-                    Text(f"r={best_r_so_far}: {best_so_far:.3f}", font_size=20, color=ADVERSARY_COLOR)
+                    Text(
+                        f"r={best_r_so_far}: {best_so_far:.3f}",
+                        font_size=20,
+                        color=ADVERSARY_COLOR,
+                    ),
                 ).arrange(DOWN, buff=0.1)
                 new_best_indicator.next_to(search_label, DOWN, buff=0.3)
                 self.play(
                     Transform(best_indicator, new_best_indicator),
                     Indicate(overlap_text, color=ADVERSARY_COLOR),
-                    run_time=0.4
+                    run_time=0.4,
                 )
 
             if r == worst_r:
                 self.wait(0.3)
-                worst_label = Text("← MAXIMUM! Adversary picks this!", font_size=18, color=BAD_COLOR)
+                worst_label = Text(
+                    "← MAXIMUM! Adversary picks this!", font_size=18, color=BAD_COLOR
+                )
                 worst_label.next_to(overlap_text, RIGHT, buff=0.2)
                 self.play(FadeIn(worst_label))
                 self.wait(0.5)
@@ -487,17 +533,14 @@ class ErdosGame(Scene):
         c5_def = MathTex(
             r"C_5 = \max_r \text{overlap}(r) = " + f"{max(overlaps):.3f}",
             font_size=32,
-            color=HIGHLIGHT_COLOR
+            color=HIGHLIGHT_COLOR,
         )
         c5_def.to_edge(DOWN, buff=0.4)
         self.play(ReplacementTransform(formula, c5_def))
         self.wait(1.5)
 
         # Cleanup
-        self.play(
-            *[FadeOut(m) for m in self.mobjects],
-            run_time=0.8
-        )
+        self.play(*[FadeOut(m) for m in self.mobjects], run_time=0.8)
 
     def scene4_naive_fails(self):
         """Scene 4: Show why extreme patterns fail (~40s)"""
@@ -509,7 +552,8 @@ class ErdosGame(Scene):
         # Intuition
         intuition = Text(
             "Intuition: If I'm at 1, their inverse is 0. Product = 0!",
-            font_size=24, color=GREY_B
+            font_size=24,
+            color=GREY_B,
         )
         intuition.next_to(title, DOWN, buff=0.3)
         self.play(Write(intuition), run_time=1)
@@ -523,26 +567,32 @@ class ErdosGame(Scene):
         your_bars = self.create_bars(h, PLAYER_COLOR, bar_width=0.5, max_height=1.8)
         your_bars.move_to(LEFT * 2.5 + DOWN * 0.3)
 
-        pattern_label = MathTex(r"h = [1, 0, 1, 0, 1, 0]", font_size=24, color=PLAYER_COLOR)
+        pattern_label = MathTex(
+            r"h = [1, 0, 1, 0, 1, 0]", font_size=24, color=PLAYER_COLOR
+        )
         pattern_label.next_to(your_bars, DOWN, buff=0.4)
 
         self.play(
-            LaggedStart(*[GrowFromEdge(bar, DOWN) for bar in your_bars], lag_ratio=0.08),
+            LaggedStart(
+                *[GrowFromEdge(bar, DOWN) for bar in your_bars], lag_ratio=0.08
+            ),
             Write(pattern_label),
-            run_time=1
+            run_time=1,
         )
 
         # Show inverse
         adv_bars = self.create_bars(j, ADVERSARY_COLOR, bar_width=0.5, max_height=1.8)
         adv_bars.move_to(RIGHT * 2.5 + DOWN * 0.3)
 
-        inv_label = MathTex(r"1-h = [0, 1, 0, 1, 0, 1]", font_size=24, color=ADVERSARY_COLOR)
+        inv_label = MathTex(
+            r"1-h = [0, 1, 0, 1, 0, 1]", font_size=24, color=ADVERSARY_COLOR
+        )
         inv_label.next_to(adv_bars, DOWN, buff=0.4)
 
         self.play(
             LaggedStart(*[GrowFromEdge(bar, DOWN) for bar in adv_bars], lag_ratio=0.08),
             Write(inv_label),
-            run_time=1
+            run_time=1,
         )
         self.wait(0.5)
 
@@ -558,22 +608,28 @@ class ErdosGame(Scene):
         self.wait(0.5)
 
         # But wait...
-        but_wait = Text("But the adversary rotates by 1...", font_size=24, color=HIGHLIGHT_COLOR)
+        but_wait = Text(
+            "But the adversary rotates by 1...", font_size=24, color=HIGHLIGHT_COLOR
+        )
         but_wait.move_to(DOWN * 2.5)
         self.play(
             ReplacementTransform(r0_text, but_wait),
             FadeOut(looks_good),
-            FadeOut(intuition)
+            FadeOut(intuition),
         )
 
         # Rotate inverse by 1
         j_rot = np.roll(j, 1)  # [1, 0, 1, 0, 1, 0] - same as h!
-        new_adv_bars = self.create_bars(j_rot, ADVERSARY_COLOR, bar_width=0.5, max_height=1.8)
+        new_adv_bars = self.create_bars(
+            j_rot, ADVERSARY_COLOR, bar_width=0.5, max_height=1.8
+        )
         new_adv_bars.move_to(RIGHT * 2.5 + DOWN * 0.3)
 
         self.play(Transform(adv_bars, new_adv_bars), run_time=0.8)
 
-        new_inv_label = MathTex(r"\text{rotated} = [1, 0, 1, 0, 1, 0]", font_size=24, color=ADVERSARY_COLOR)
+        new_inv_label = MathTex(
+            r"\text{rotated} = [1, 0, 1, 0, 1, 0]", font_size=24, color=ADVERSARY_COLOR
+        )
         new_inv_label.next_to(adv_bars, DOWN, buff=0.4)
         self.play(Transform(inv_label, new_inv_label))
         self.wait(0.3)
@@ -587,30 +643,26 @@ class ErdosGame(Scene):
         self.play(
             *[bar.animate.set_fill(BAD_COLOR) for bar in your_bars],
             *[bar.animate.set_fill(BAD_COLOR) for bar in adv_bars],
-            run_time=0.4
+            run_time=0.4,
         )
         self.wait(0.3)
         self.play(
             *[bar.animate.set_fill(PLAYER_COLOR) for bar in your_bars],
             *[bar.animate.set_fill(ADVERSARY_COLOR) for bar in adv_bars],
-            run_time=0.3
+            run_time=0.3,
         )
 
         # Show the disaster
         overlap_calc = MathTex(
             r"\text{overlap}(1) = \frac{1}{6}(1 \cdot 1 + 0 \cdot 0 + \cdots) = \frac{3}{6} = 0.5",
-            font_size=26
+            font_size=26,
         )
         overlap_calc.move_to(DOWN * 2.8)
 
         disaster = Text("Worst possible overlap!", font_size=24, color=BAD_COLOR)
         disaster.next_to(overlap_calc, DOWN, buff=0.2)
 
-        self.play(
-            FadeOut(match_text),
-            Write(overlap_calc),
-            run_time=1
-        )
+        self.play(FadeOut(match_text), Write(overlap_calc), run_time=1)
         self.play(FadeIn(disaster))
         self.wait(0.5)
 
@@ -618,17 +670,14 @@ class ErdosGame(Scene):
         c5_bad = MathTex(r"C_5 = 0.5", font_size=40, color=BAD_COLOR)
         c5_bad.move_to(DOWN * 2.3)
 
-        self.play(
-            FadeOut(overlap_calc),
-            FadeOut(disaster),
-            Write(c5_bad)
-        )
+        self.play(FadeOut(overlap_calc), FadeOut(disaster), Write(c5_bad))
         self.wait(0.8)
 
         # Lesson
         lesson = Text(
             "Extreme patterns have predictable inverses → easy to exploit",
-            font_size=22, color=GREY_B
+            font_size=22,
+            color=GREY_B,
         )
         lesson.to_edge(DOWN, buff=0.4)
         self.play(FadeIn(lesson))
@@ -636,10 +685,14 @@ class ErdosGame(Scene):
 
         # Cleanup
         self.play(
-            FadeOut(title), FadeOut(your_bars), FadeOut(adv_bars),
-            FadeOut(pattern_label), FadeOut(inv_label),
-            FadeOut(c5_bad), FadeOut(lesson),
-            run_time=0.8
+            FadeOut(title),
+            FadeOut(your_bars),
+            FadeOut(adv_bars),
+            FadeOut(pattern_label),
+            FadeOut(inv_label),
+            FadeOut(c5_bad),
+            FadeOut(lesson),
+            run_time=0.8,
         )
 
     def scene5_uniform_insight(self):
@@ -650,7 +703,9 @@ class ErdosGame(Scene):
         self.play(Write(title), run_time=0.8)
 
         # Question
-        question = Text("What if we use uniform 0.5 everywhere?", font_size=26, color=GREY_B)
+        question = Text(
+            "What if we use uniform 0.5 everywhere?", font_size=26, color=GREY_B
+        )
         question.next_to(title, DOWN, buff=0.3)
         self.play(Write(question))
         self.wait(0.5)
@@ -662,35 +717,40 @@ class ErdosGame(Scene):
         your_bars = self.create_bars(h, PLAYER_COLOR, bar_width=0.5, max_height=1.8)
         your_bars.move_to(LEFT * 2.5 + DOWN * 0.3)
 
-        pattern_label = MathTex(r"h = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]", font_size=22, color=PLAYER_COLOR)
+        pattern_label = MathTex(
+            r"h = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]", font_size=22, color=PLAYER_COLOR
+        )
         pattern_label.next_to(your_bars, DOWN, buff=0.4)
 
         self.play(
-            LaggedStart(*[GrowFromEdge(bar, DOWN) for bar in your_bars], lag_ratio=0.08),
+            LaggedStart(
+                *[GrowFromEdge(bar, DOWN) for bar in your_bars], lag_ratio=0.08
+            ),
             Write(pattern_label),
-            run_time=1
+            run_time=1,
         )
 
         # Show inverse - also uniform!
         adv_bars = self.create_bars(j, ADVERSARY_COLOR, bar_width=0.5, max_height=1.8)
         adv_bars.move_to(RIGHT * 2.5 + DOWN * 0.3)
 
-        inv_label = MathTex(r"1-h = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]", font_size=22, color=ADVERSARY_COLOR)
+        inv_label = MathTex(
+            r"1-h = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]", font_size=22, color=ADVERSARY_COLOR
+        )
         inv_label.next_to(adv_bars, DOWN, buff=0.4)
 
         self.play(
             LaggedStart(*[GrowFromEdge(bar, DOWN) for bar in adv_bars], lag_ratio=0.08),
             Write(inv_label),
-            run_time=1
+            run_time=1,
         )
 
         # Key insight
-        key_insight = Text("The inverse is ALSO uniform!", font_size=28, color=HIGHLIGHT_COLOR)
-        key_insight.move_to(UP * 0.8)
-        self.play(
-            FadeOut(question),
-            Write(key_insight)
+        key_insight = Text(
+            "The inverse is ALSO uniform!", font_size=28, color=HIGHLIGHT_COLOR
         )
+        key_insight.move_to(UP * 0.8)
+        self.play(FadeOut(question), Write(key_insight))
         self.wait(0.5)
 
         # Rotate multiple times - nothing changes!
@@ -700,7 +760,9 @@ class ErdosGame(Scene):
 
         for r in range(4):
             j_rot = np.roll(j, 1)
-            new_adv_bars = self.create_bars(j_rot, ADVERSARY_COLOR, bar_width=0.5, max_height=1.8)
+            new_adv_bars = self.create_bars(
+                j_rot, ADVERSARY_COLOR, bar_width=0.5, max_height=1.8
+            )
             new_adv_bars.move_to(RIGHT * 2.5 + DOWN * 0.3)
             self.play(Transform(adv_bars, new_adv_bars), run_time=0.3)
 
@@ -712,8 +774,12 @@ class ErdosGame(Scene):
         # Show the math
         math_box = VGroup(
             MathTex(r"\text{Every product:} \quad 0.5 \times 0.5 = 0.25", font_size=26),
-            MathTex(r"\text{Every rotation:} \quad \text{overlap} = 0.25", font_size=26),
-            MathTex(r"C_5 = \max_r \text{overlap}(r) = 0.25", font_size=30, color=GOOD_COLOR),
+            MathTex(
+                r"\text{Every rotation:} \quad \text{overlap} = 0.25", font_size=26
+            ),
+            MathTex(
+                r"C_5 = \max_r \text{overlap}(r) = 0.25", font_size=30, color=GOOD_COLOR
+            ),
         ).arrange(DOWN, buff=0.2)
         math_box.move_to(DOWN * 2.3)
 
@@ -727,46 +793,47 @@ class ErdosGame(Scene):
         self.play(
             *[bar.animate.set_fill(GOOD_COLOR) for bar in your_bars],
             *[bar.animate.set_fill(GOOD_COLOR) for bar in adv_bars],
-            run_time=0.4
+            run_time=0.4,
         )
         self.play(
             *[bar.animate.set_fill(PLAYER_COLOR) for bar in your_bars],
             *[bar.animate.set_fill(ADVERSARY_COLOR) for bar in adv_bars],
-            run_time=0.3
+            run_time=0.3,
         )
         self.wait(0.5)
 
         # The insight
         insight_box = VGroup(
-            Text("Rotation Invariance = No Exploitable Weakness", font_size=24, color=WHITE),
+            Text(
+                "Rotation Invariance = No Exploitable Weakness",
+                font_size=24,
+                color=WHITE,
+            ),
             Text("The adversary has no advantage!", font_size=20, color=GREY_B),
         ).arrange(DOWN, buff=0.15)
         insight_box.to_edge(DOWN, buff=0.3)
 
-        self.play(
-            FadeOut(math_box),
-            Write(insight_box),
-            run_time=1
-        )
+        self.play(FadeOut(math_box), Write(insight_box), run_time=1)
         self.wait(1)
 
         # This is a Nash equilibrium
         nash = Text("This is a Nash Equilibrium", font_size=28, color=HIGHLIGHT_COLOR)
         nash.move_to(DOWN * 2.5)
 
-        self.play(
-            FadeOut(insight_box),
-            Write(nash)
-        )
+        self.play(FadeOut(insight_box), Write(nash))
         self.wait(1)
 
         # Cleanup
         self.play(
-            FadeOut(title), FadeOut(key_insight), FadeOut(same_text),
-            FadeOut(your_bars), FadeOut(adv_bars),
-            FadeOut(pattern_label), FadeOut(inv_label),
+            FadeOut(title),
+            FadeOut(key_insight),
+            FadeOut(same_text),
+            FadeOut(your_bars),
+            FadeOut(adv_bars),
+            FadeOut(pattern_label),
+            FadeOut(inv_label),
             FadeOut(nash),
-            run_time=0.8
+            run_time=0.8,
         )
 
     def scene6_conclusion(self):
@@ -778,10 +845,24 @@ class ErdosGame(Scene):
         self.play(Write(title))
 
         summary = VGroup(
-            Text("• Minimax optimization: you minimize, adversary maximizes", font_size=22, color=WHITE),
-            Text("• Extreme patterns are exploitable (C₅ = 0.5)", font_size=22, color=BAD_COLOR),
-            Text("• Uniform 0.5 achieves rotation invariance", font_size=22, color=WHITE),
-            Text("• C₅ = 0.25 is optimal for balanced allocations", font_size=22, color=GOOD_COLOR),
+            Text(
+                "• Minimax optimization: you minimize, adversary maximizes",
+                font_size=22,
+                color=WHITE,
+            ),
+            Text(
+                "• Extreme patterns are exploitable (C₅ = 0.5)",
+                font_size=22,
+                color=BAD_COLOR,
+            ),
+            Text(
+                "• Uniform 0.5 achieves rotation invariance", font_size=22, color=WHITE
+            ),
+            Text(
+                "• C₅ = 0.25 is optimal for balanced allocations",
+                font_size=22,
+                color=GOOD_COLOR,
+            ),
         ).arrange(DOWN, buff=0.25, aligned_edge=LEFT)
         summary.move_to(UP * 0.3)
 
@@ -795,7 +876,11 @@ class ErdosGame(Scene):
         deeper = VGroup(
             Text("The deeper question:", font_size=26, color=HIGHLIGHT_COLOR),
             Text("Can non-uniform patterns ever beat 0.25?", font_size=24, color=WHITE),
-            Text("(Under different constraints, the search continues...)", font_size=20, color=GREY_B),
+            Text(
+                "(Under different constraints, the search continues...)",
+                font_size=20,
+                color=GREY_B,
+            ),
         ).arrange(DOWN, buff=0.15)
         deeper.move_to(DOWN * 2)
 
@@ -806,17 +891,11 @@ class ErdosGame(Scene):
         cta = Text("Try it yourself!", font_size=36, color=GOOD_COLOR)
         cta.move_to(DOWN * 2.5)
 
-        self.play(
-            FadeOut(deeper),
-            Write(cta)
-        )
+        self.play(FadeOut(deeper), Write(cta))
         self.wait(2)
 
         # Fade all
-        self.play(
-            *[FadeOut(m) for m in self.mobjects],
-            run_time=1
-        )
+        self.play(*[FadeOut(m) for m in self.mobjects], run_time=1)
         self.wait(0.5)
 
 
