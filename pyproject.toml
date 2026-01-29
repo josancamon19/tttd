@@ -1,10 +1,13 @@
 [project]
 name = "tttd"
 version = "0.1.0"
-description = "Add your description here"
+description = "Test-Time Training on Erdős Minimum Overlap Problem"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "chz>=0.4.0",
+    "numpy",
+    "python-dotenv",
     "tinker>=0.9.0",
     "tinker-cookbook",
 ]
