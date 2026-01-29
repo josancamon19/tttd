@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from dataclasses import dataclass
 from typing import Literal
+
+import chz
 from datetime import datetime
 from pathlib import Path
 
@@ -21,14 +22,14 @@ from tinker_cookbook.tokenizer_utils import get_tokenizer
 
 from tttd.erdos.env import get_improvement_prompt
 from tttd.erdos.executor import extract_code_block, run_erdos_eval
-from tttd.sampler import create_initial_erdos_state, ErdosState
+from tttd.sampler import create_initial_erdos_state
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 load_dotenv()
 
 
-@dataclass
+@chz.chz
 class EvalConfig:
     model: Literal[
         "openai/gpt-oss-20b",
@@ -165,7 +166,8 @@ async def main(config: EvalConfig):
 
 
 def run():
-    asyncio.run(main(EvalConfig()))
+    config = chz.entrypoint(EvalConfig)
+    asyncio.run(main(config))
 
 
 if __name__ == "__main__":
