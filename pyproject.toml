@@ -29,4 +29,13 @@ tinker-cookbook = { git = "https://github.com/thinking-machines-lab/tinker-cookb
 dev = [
     "matplotlib>=3.10.8",
     "networkx>=3.6.1",
+    "pytest>=8.0.0",
+    "anyio>=4.0.0",
+    "pytest-anyio>=0.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
 ]

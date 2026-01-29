@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 """Test script for Erdős task - verifies baseline eval and single rollout work."""
 
-import asyncio
 import logging
-import sys
-from pathlib import Path
 
 import pytest
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,7 +11,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configure pytest-asyncio
 pytestmark = pytest.mark.anyio
 
 
@@ -493,28 +486,3 @@ def test_advantages():
     logger.info("✓ Advantage estimators work\n")
 
 
-async def main():
-    """Run all tests."""
-    logger.info("=" * 60)
-    logger.info("Erdős Task Test Suite")
-    logger.info("=" * 60 + "\n")
-
-    # Sync tests
-    test_verifier()
-    test_executor()
-    test_baseline_solution()
-    test_puct_sampler()
-    test_puct_advanced()
-    test_advantages()
-
-    # Async tests
-    await test_env()
-    await test_single_rollout()
-
-    logger.info("=" * 60)
-    logger.info("All tests passed!")
-    logger.info("=" * 60)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
