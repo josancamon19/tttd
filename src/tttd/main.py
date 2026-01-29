@@ -47,6 +47,7 @@ class TrainConfig:
     verbose: bool = False
     wandb_project: str | None = "tttd-erdos"
     wandb_name: str | None = None
+    seed: int = 42
 
 
 async def _async_main(config: TrainConfig):
@@ -67,6 +68,7 @@ async def _async_main(config: TrainConfig):
         puct_c=config.puct_c,
         max_buffer_size=config.max_buffer_size,
         topk_children=config.topk_children,
+        seed=config.seed,
     )
 
     cfg = train.Config(

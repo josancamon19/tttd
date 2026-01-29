@@ -20,10 +20,7 @@ from tttd.sampler import ErdosState, PUCTSampler, GreedySampler, StateSampler
 
 
 class ErdosEvalDataset(RLDataset):
-    """Simple eval dataset - fresh random states with no prior context.
-
-    Used to measure if the model can produce good solutions from scratch.
-    """
+    """Simple eval dataset - fresh random states with no prior context."""
 
     def __init__(
         self,
@@ -31,24 +28,25 @@ class ErdosEvalDataset(RLDataset):
         num_batches: int,
         group_size: int,
         timeout: int,
+        seed: int = 42,
     ):
         self._renderer = renderer
         self._num_batches = num_batches
         self._group_size = group_size
         self._timeout = timeout
+        self._seed = seed
 
     def get_batch(self, index: int) -> Sequence[EnvGroupBuilder]:
         from tttd.sampler import create_initial_erdos_state
 
-        # Single fresh state per eval batch, no prior code shown
-        fresh_state = create_initial_erdos_state()
+        fresh_state = create_initial_erdos_state(seed=self._seed + index)
         return [
             ErdosEnvGroupBuilder(
                 renderer=self._renderer,
                 group_size=self._group_size,
                 timeout=self._timeout,
                 parent_state=fresh_state,
-                hide_code=True,  # Don't show any prior code
+                hide_code=True,
             )
         ]
 
@@ -163,7 +161,8 @@ class ErdosDatasetBuilder(RLDatasetBuilder):
     topk_children: int = 2
 
     # Eval config
-    eval_batches: int = 1  # Number of eval batches (fresh starts)
+    eval_batches: int = 1
+    seed: int = 42
 
     async def __call__(self) -> tuple[RLDataset, RLDataset | None]:
         renderer_name = self.renderer_name
@@ -180,12 +179,14 @@ class ErdosDatasetBuilder(RLDatasetBuilder):
                 max_buffer_size=self.max_buffer_size,
                 puct_c=self.puct_c,
                 topk_children=self.topk_children,
+                seed=self.seed,
             )
         elif self.sampler_type == "greedy":
             sampler = GreedySampler(
                 log_path=self.log_path,
                 max_buffer_size=self.max_buffer_size,
                 topk_children=self.topk_children,
+                seed=self.seed,
             )
         else:
             raise ValueError(f"Unknown sampler_type: {self.sampler_type}")
@@ -205,6 +206,7 @@ class ErdosDatasetBuilder(RLDatasetBuilder):
             num_batches=self.eval_batches,
             group_size=self.group_size,
             timeout=self.timeout,
+            seed=self.seed,
         )
 
         return dataset, eval_dataset

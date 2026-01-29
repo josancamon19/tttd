@@ -37,6 +37,7 @@ class EvalConfig:
         "Qwen/Qwen3-32B",
     ] = "openai/gpt-oss-20b"
     num_samples: int = 8
+    seed: int = 42
     max_tokens: int = 26000
     temperature: float = 1.0
     timeout: int = 1100
@@ -53,7 +54,7 @@ def pass_at_k(n: int, c: int, k: int) -> float:
 async def evaluate_model(model_name: str, config: EvalConfig) -> dict:
     """Run all samples for one model."""
     logger.info(f"Evaluating: {model_name}")
-    state = create_initial_erdos_state()
+    state = create_initial_erdos_state(seed=config.seed)
     logger.info(f"  Initial: n={len(state.h_values)}, c5={state.c5_bound:.6f}")
 
     # Setup once

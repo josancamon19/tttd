@@ -69,15 +69,15 @@ class ErdosState:
         )
 
 
-def create_initial_erdos_state() -> ErdosState:
+def create_initial_erdos_state(seed: int | None = None) -> ErdosState:
     """Create an initial random Erdős state.
 
     Matches TTT-Discover's initialization:
     - n_points in [40, 100)
     - h = 0.5 + zero-centered perturbation in [-0.4, 0.4]
     """
-    rng = np.random.default_rng()
-    n_points = rng.integers(40, 100)  # Original uses 40-100
+    rng = np.random.default_rng(seed)
+    n_points = rng.integers(40, 100)
 
     # Start with h = 0.5 + zero-centered perturbation
     h_values = np.ones(n_points) * 0.5
@@ -152,12 +152,15 @@ class PUCTSampler(StateSampler):
         puct_c: float = 1.0,
         topk_children: int = 2,
         group_size: int = 1,
+        seed: int = 42,
     ):
         self.log_path = log_path
         self.max_buffer_size = max_buffer_size
         self.puct_c = puct_c
         self.topk_children = topk_children
         self.group_size = group_size
+        self.seed = seed
+        self._rng = np.random.default_rng(seed)
 
         self._states: list[ErdosState] = []
         self._initial_states: list[ErdosState] = []
@@ -175,7 +178,7 @@ class PUCTSampler(StateSampler):
 
         # Create initial state if empty
         if not self._states:
-            initial = create_initial_erdos_state()
+            initial = create_initial_erdos_state(seed=seed)
             self._initial_states.append(initial)
             self._states.append(initial)
 
@@ -303,7 +306,7 @@ class PUCTSampler(StateSampler):
     def sample_states(self, num_states: int) -> list[ErdosState]:
         """Sample states using PUCT formula."""
         if not self._states:
-            picked = [create_initial_erdos_state() for _ in range(num_states)]
+            picked = [create_initial_erdos_state(seed=int(self._rng.integers(0, 2**31))) for _ in range(num_states)]
             self._last_sampled_states = picked
             return picked
 
@@ -358,7 +361,7 @@ class PUCTSampler(StateSampler):
 
         # Pad with new initial states if needed
         while len(picked) < num_states:
-            picked.append(create_initial_erdos_state())
+            picked.append(create_initial_erdos_state(seed=int(self._rng.integers(0, 2**31))))
 
         # Refresh random construction for initial states (so re-sampling explores new starting points)
         for s in picked:
@@ -558,14 +561,17 @@ class GreedySampler(StateSampler):
     def __init__(
         self,
         log_path: str,
-        max_buffer_size: int = 1000,  # TTT-Discover batch_size default
-        epsilon: float = 0.125,  # TTT-Discover default
-        topk_children: int = 1,  # TTT-Discover default
+        max_buffer_size: int = 1000,
+        epsilon: float = 0.125,
+        topk_children: int = 1,
+        seed: int = 42,
     ):
         self.log_path = log_path
         self.max_buffer_size = max_buffer_size
         self.epsilon = epsilon
         self.topk_children = topk_children
+        self.seed = seed
+        self._rng = np.random.default_rng(seed)
         self._states: list[ErdosState] = []
         self._lock = threading.Lock()
         self._current_step = 0
@@ -573,18 +579,17 @@ class GreedySampler(StateSampler):
         Path(log_path).mkdir(parents=True, exist_ok=True)
 
         if not self._states:
-            self._states.append(create_initial_erdos_state())
+            self._states.append(create_initial_erdos_state(seed=seed))
 
     def sample_states(self, num_states: int) -> list[ErdosState]:
         if not self._states:
-            return [create_initial_erdos_state() for _ in range(num_states)]
+            return [create_initial_erdos_state(seed=self.seed + i) for i in range(num_states)]
 
         result = []
         for _ in range(num_states):
-            if np.random.random() < self.epsilon and len(self._states) > 1:
-                result.append(np.random.choice(self._states))
+            if self._rng.random() < self.epsilon and len(self._states) > 1:
+                result.append(self._rng.choice(self._states))
             else:
-                # Return best
                 best = max(
                     self._states, key=lambda s: s.value if s.value else float("-inf")
                 )
