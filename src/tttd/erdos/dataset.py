@@ -79,11 +79,17 @@ class ErdosDataset(RLDataset):
             if parent is None:
                 continue
 
+            has_valid_child = False
             for child in builder.get_child_states():
                 if child is not None and child.value is not None:
                     child.timestep = step
                     all_children.append(child)
                     all_parents.append(parent)
+                    has_valid_child = True
+
+            # Record failed rollout if no valid children from this parent
+            if not has_valid_child:
+                self._sampler.record_failed_rollout(parent)
 
         if all_children:
             self._sampler.update_states(all_children, all_parents, step=step)

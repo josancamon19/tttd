@@ -19,6 +19,10 @@ from typing import Any
 
 import numpy as np
 
+# Erdős-specific constants
+MAX_ERDOS_CONSTRUCTION_LEN = 1000  # Max h_values array length
+MIN_ERDOS_CONSTRUCTION_LEN = 50   # Min h_values array length
+
 
 @dataclass
 class ErdosState:
@@ -102,6 +106,10 @@ class StateSampler(ABC):
         step: int | None = None,
     ):
         """Update sampler with new states."""
+        pass
+
+    def record_failed_rollout(self, parent: ErdosState):
+        """Record a failed rollout (default: no-op, override in subclasses)."""
         pass
 
     @abstractmethod
@@ -194,11 +202,17 @@ class PUCTSampler(StateSampler):
         self._m = data.get("puct_m", {})
         self._T = data.get("puct_T", 0)
 
-    def _compute_scale(self, values: np.ndarray) -> float:
-        """Compute value scale for PUCT bonus normalization."""
+    def _compute_scale(self, values: np.ndarray, mask: np.ndarray | None = None) -> float:
+        """Compute value scale for PUCT bonus normalization.
+
+        Args:
+            values: Array of state values
+            mask: Optional boolean mask to filter which values to use
+        """
         if len(values) == 0:
             return 1.0
-        valid = values[~np.isnan(values) & ~np.isinf(values)]
+        v = values[mask] if mask is not None else values
+        valid = v[~np.isnan(v) & ~np.isinf(v)]
         if len(valid) == 0:
             return 1.0
         return max(float(np.max(valid) - np.min(valid)), 1e-6)
@@ -211,6 +225,61 @@ class PUCTSampler(StateSampler):
         ranks = np.argsort(np.argsort(-values))  # Higher value = lower rank
         weights = (n - ranks).astype(np.float64)
         return weights / weights.sum()
+
+    def _build_children_map(self) -> dict[str, list[str]]:
+        """Build a map from parent_id -> list of child_ids."""
+        children_map: dict[str, list[str]] = {}
+        for s in self._states:
+            if s.parents:
+                parent_id = s.parents[0].get("id")
+                if parent_id:
+                    if parent_id not in children_map:
+                        children_map[parent_id] = []
+                    children_map[parent_id].append(s.id)
+        return children_map
+
+    def _get_full_lineage(self, state: ErdosState, children_map: dict[str, list[str]]) -> set[str]:
+        """Get full lineage: ancestors + descendants (to avoid sampling related states)."""
+        lineage = {state.id}
+
+        # Add ancestors
+        for p in state.parents:
+            pid = p.get("id")
+            if pid:
+                lineage.add(pid)
+
+        # Add descendants (BFS)
+        queue = [state.id]
+        while queue:
+            current = queue.pop(0)
+            for child_id in children_map.get(current, []):
+                if child_id not in lineage:
+                    lineage.add(child_id)
+                    queue.append(child_id)
+
+        return lineage
+
+    def _refresh_random_construction(self, state: ErdosState):
+        """Re-randomize the h_values for an initial state when re-sampled."""
+        rng = np.random.default_rng()
+        n_points = len(state.h_values) if state.h_values else rng.integers(100, 300)
+
+        # Generate new random h_values
+        h_values = np.ones(n_points) * 0.5
+        perturbation = rng.uniform(-0.3, 0.3, n_points)
+        perturbation = perturbation - np.mean(perturbation)
+        h_values = np.clip(h_values + perturbation, 0, 1)
+
+        # Recompute bound
+        j_values = 1.0 - h_values
+        dx = 2.0 / n_points
+        correlation = np.correlate(h_values, j_values, mode="full") * dx
+        c5_bound = float(np.max(correlation))
+
+        # Update state in place
+        state.h_values = h_values.tolist()
+        state.c5_bound = c5_bound
+        state.value = -c5_bound
 
     def sample_states(self, num_states: int) -> list[ErdosState]:
         """Sample states using PUCT formula."""
@@ -225,7 +294,15 @@ class PUCTSampler(StateSampler):
             for s in self._states
         ])
 
-        scale = self._compute_scale(values)
+        # Build mask for non-initial states (for scale computation)
+        initial_ids = {s.id for s in self._initial_states}
+        non_initial_mask = np.array([s.id not in initial_ids for s in self._states])
+
+        # Compute scale excluding initial states (if any non-initial exist)
+        scale = self._compute_scale(
+            values,
+            non_initial_mask if non_initial_mask.any() else None
+        )
         self._last_scale = scale
         P = self._compute_prior(values)
         G = self.group_size
@@ -245,25 +322,45 @@ class PUCTSampler(StateSampler):
         scores.sort(key=lambda x: (x[0], x[1]), reverse=True)
 
         # Pick top states, avoiding duplicates in lineage
-        picked = []
-        picked_ids = set()
-        for score, val, state, idx in scores:
-            if state.id in picked_ids:
-                continue
-            # Also block ancestors
-            for p in state.parents:
-                picked_ids.add(p.get("id", ""))
-            picked_ids.add(state.id)
-            picked.append(state)
-            if len(picked) >= num_states:
-                break
+        # When sampling multiple states, block full lineage (ancestors + descendants)
+        if num_states > 1:
+            children_map = self._build_children_map()
+            picked = []
+            blocked_ids: set[str] = set()
+            for score, val, state, idx in scores:
+                if state.id in blocked_ids:
+                    continue
+                picked.append(state)
+                # Block full lineage to ensure diversity
+                blocked_ids.update(self._get_full_lineage(state, children_map))
+                if len(picked) >= num_states:
+                    break
+        else:
+            # Single state: just pick the best
+            picked = [scores[0][2]] if scores else []
 
-        # Pad with initial states if needed
+        # Pad with new initial states if needed
         while len(picked) < num_states:
             picked.append(create_initial_erdos_state())
 
+        # Refresh random construction for initial states (so re-sampling explores new starting points)
+        for s in picked:
+            if s.id in initial_ids:
+                self._refresh_random_construction(s)
+
         self._last_sampled_states = picked
         return picked
+
+    def record_failed_rollout(self, parent: ErdosState):
+        """Record a failed rollout - still updates visit counts for exploration tracking."""
+        anc_ids = [parent.id]
+        if parent.parents:
+            anc_ids.extend(str(p.get("id", "")) for p in parent.parents if p.get("id"))
+
+        for aid in anc_ids:
+            if aid:
+                self._n[aid] = self._n.get(aid, 0) + 1
+        self._T += 1
 
     def update_states(
         self,
@@ -275,8 +372,10 @@ class PUCTSampler(StateSampler):
         if not states:
             return
 
-        # Update PUCT statistics
+        # Update PUCT statistics - track best child per parent and update ancestors
+        parent_map: dict[str, ErdosState] = {p.id: p for p in parent_states}
         parent_max: dict[str, float] = {}
+
         for child, parent in zip(states, parent_states):
             if child.value is None:
                 continue
@@ -284,10 +383,20 @@ class PUCTSampler(StateSampler):
             parent_max[pid] = max(parent_max.get(pid, float("-inf")), child.value)
 
         for pid, best_child_value in parent_max.items():
-            # Update best reachable value
+            # Update best reachable value for parent
             self._m[pid] = max(self._m.get(pid, best_child_value), best_child_value)
-            # Increment visit counts for parent and ancestors
-            self._n[pid] = self._n.get(pid, 0) + 1
+
+            # Get ancestor IDs: parent + all its ancestors
+            parent = parent_map.get(pid)
+            anc_ids = [pid]
+            if parent and parent.parents:
+                anc_ids.extend(str(p.get("id", "")) for p in parent.parents if p.get("id"))
+
+            # Increment visit counts for parent AND all ancestors
+            for aid in anc_ids:
+                if aid:
+                    self._n[aid] = self._n.get(aid, 0) + 1
+
             self._T += 1
 
         # Filter to top-k children per parent
@@ -303,9 +412,15 @@ class PUCTSampler(StateSampler):
         for child, parent in zip(states, parent_states):
             if child.value is None or child.h_values is None:
                 continue
+
+            # Validate construction length
+            if not (MIN_ERDOS_CONSTRUCTION_LEN <= len(child.h_values) <= MAX_ERDOS_CONSTRUCTION_LEN):
+                continue
+
             key = tuple(child.h_values)
             if key in existing_keys:
                 continue
+
             # Set parent info
             child.parent_values = [parent.value] + parent.parent_values if parent.value else []
             child.parents = [{"id": parent.id, "timestep": parent.timestep}] + parent.parents

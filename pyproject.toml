@@ -24,3 +24,9 @@ packages = ["src/tttd"]
 
 [tool.uv.sources]
 tinker-cookbook = { git = "https://github.com/thinking-machines-lab/tinker-cookbook.git" }
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.10.8",
+    "networkx>=3.6.1",
+]

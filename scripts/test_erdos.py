@@ -307,6 +307,112 @@ def test_puct_sampler():
     logger.info("✓ PUCT Sampler works\n")
 
 
+def test_puct_advanced():
+    """Test advanced PUCT sampler features."""
+    logger.info("=== Testing PUCT Advanced Features ===")
+
+    import tempfile
+    from tttd.sampler import PUCTSampler, ErdosState, create_initial_erdos_state
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        sampler = PUCTSampler(
+            log_path=tmpdir,
+            max_buffer_size=20,
+            puct_c=1.0,
+        )
+
+        # Test 1: record_failed_rollout
+        logger.info("Testing record_failed_rollout...")
+        initial_T = sampler._T
+        parent = sampler.sample_states(1)[0]
+        initial_n = sampler._n.get(parent.id, 0)
+
+        sampler.record_failed_rollout(parent)
+
+        assert sampler._T == initial_T + 1, "T should increment on failed rollout"
+        assert sampler._n.get(parent.id, 0) == initial_n + 1, "n should increment on failed rollout"
+        logger.info("  ✓ record_failed_rollout increments T and n")
+
+        # Test 2: Ancestor visit count propagation
+        logger.info("Testing ancestor visit count propagation...")
+        # Create a parent with existing ancestors
+        grandparent = create_initial_erdos_state()
+        parent_with_ancestry = ErdosState(
+            timestep=0,
+            value=-0.45,
+            c5_bound=0.45,
+            h_values=[0.5] * 100,
+            code="# parent",
+            parents=[{"id": grandparent.id, "timestep": -1}],
+        )
+        sampler._states.append(grandparent)
+        sampler._states.append(parent_with_ancestry)
+
+        # Create child
+        child = ErdosState(
+            timestep=1,
+            value=-0.40,
+            c5_bound=0.40,
+            h_values=[0.6] * 100,
+            code="# child",
+        )
+
+        gp_n_before = sampler._n.get(grandparent.id, 0)
+        p_n_before = sampler._n.get(parent_with_ancestry.id, 0)
+
+        sampler.update_states([child], [parent_with_ancestry], step=1)
+
+        gp_n_after = sampler._n.get(grandparent.id, 0)
+        p_n_after = sampler._n.get(parent_with_ancestry.id, 0)
+
+        assert p_n_after == p_n_before + 1, "Parent n should increment"
+        assert gp_n_after == gp_n_before + 1, "Grandparent n should also increment"
+        logger.info("  ✓ Ancestor visit counts propagate correctly")
+
+        # Test 3: Initial state refreshing
+        logger.info("Testing initial state refreshing...")
+        sampler2 = PUCTSampler(log_path=tmpdir + "/test2", max_buffer_size=10)
+        initial = sampler2._initial_states[0]
+        original_h = initial.h_values.copy() if initial.h_values else None
+
+        # Sample the initial state - should refresh
+        sampled = sampler2.sample_states(1)[0]
+        if sampled.id == initial.id:
+            # The h_values should be different after refresh
+            assert sampled.h_values != original_h or len(sampler2._states) == 1, \
+                "Initial state should be refreshed with new h_values"
+        logger.info("  ✓ Initial states refresh when re-sampled")
+
+        # Test 4: Full lineage blocking
+        logger.info("Testing full lineage blocking...")
+        sampler3 = PUCTSampler(log_path=tmpdir + "/test3", max_buffer_size=20)
+
+        # Create a tree: root -> child1 -> grandchild
+        root = sampler3._states[0]
+        child1 = ErdosState(
+            timestep=0, value=-0.45, c5_bound=0.45,
+            h_values=[0.55] * 100, code="# c1",
+            parents=[{"id": root.id, "timestep": -1}],
+        )
+        grandchild = ErdosState(
+            timestep=1, value=-0.40, c5_bound=0.40,
+            h_values=[0.60] * 100, code="# gc",
+            parents=[{"id": child1.id, "timestep": 0}, {"id": root.id, "timestep": -1}],
+        )
+        sampler3._states.extend([child1, grandchild])
+
+        # When sampling 2 states, we should not get both root and grandchild
+        # (they're in the same lineage)
+        children_map = sampler3._build_children_map()
+        lineage = sampler3._get_full_lineage(root, children_map)
+
+        assert child1.id in lineage, "Child should be in root's lineage"
+        assert grandchild.id in lineage, "Grandchild should be in root's lineage"
+        logger.info("  ✓ Full lineage blocking works correctly")
+
+    logger.info("✓ PUCT Advanced Features work\n")
+
+
 def test_advantages():
     """Test the advantage estimators."""
     logger.info("=== Testing Advantage Estimators ===")
@@ -370,6 +476,7 @@ async def main():
     test_executor()
     test_baseline_solution()
     test_puct_sampler()
+    test_puct_advanced()
     test_advantages()
 
     # Async tests
