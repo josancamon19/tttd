@@ -12,3 +12,6 @@ wheels/
 ./tmp
 results/
 outputs/
+scripts/erdos/erdos_video.py
+scripts/erdos/scenes.md
+media/
