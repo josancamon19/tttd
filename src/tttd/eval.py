@@ -47,6 +47,17 @@ def pass_at_k(n: int, c: int, k: int) -> float:
     return 1.0 - np.prod(1.0 - k / np.arange(n - c + 1, n + 1))
 
 
+def sanitize_for_json(obj):
+    """Convert inf/nan to None for valid JSON."""
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_for_json(v) for v in obj]
+    if isinstance(obj, float) and (np.isnan(obj) or np.isinf(obj)):
+        return None
+    return obj
+
+
 async def evaluate_model(config: EvalConfig) -> dict:
     logger.info(f"Evaluating: {config.model}")
     state = create_initial_erdos_state(seed=config.seed)
@@ -78,15 +89,21 @@ async def evaluate_model(config: EvalConfig) -> dict:
     # Evaluate each sample using fresh envs
     results = []
     for seq in response.sequences:
-        env = ErdosEnv(renderer, timeout=config.timeout, parent_state=state, hide_code=True)
+        env = ErdosEnv(
+            renderer, timeout=config.timeout, parent_state=state, hide_code=True
+        )
         await env.initial_observation()
         step_result = await env.step(seq.tokens)
-        results.append({
-            "success": step_result.metrics.get("correct", 0) == 1,
-            "c5_bound": step_result.metrics.get("c5_bound"),
-            "score": step_result.metrics.get("score", 0),
-            "error": step_result.logs.get("msg") if not step_result.metrics.get("correct") else None,
-        })
+        results.append(
+            {
+                "success": step_result.metrics.get("correct", 0) == 1,
+                "c5_bound": step_result.metrics.get("c5_bound"),
+                "score": step_result.metrics.get("score", 0),
+                "error": step_result.logs.get("msg")
+                if not step_result.metrics.get("correct")
+                else None,
+            }
+        )
 
     # Metrics
     successful = [r for r in results if r["success"]]
@@ -117,9 +134,11 @@ async def main(config: EvalConfig):
     result = await evaluate_model(config)
 
     path = results_dir / f"{config.model.replace('/', '_')}_{timestamp}.json"
-    path.write_text(json.dumps(result, indent=2, default=str))
+    path.write_text(json.dumps(sanitize_for_json(result), indent=2))
 
-    logger.info(f"Success: {result['success_rate']:.0%} ({result['num_correct']}/{result['num_samples']})")
+    logger.info(
+        f"Success: {result['success_rate']:.0%} ({result['num_correct']}/{result['num_samples']})"
+    )
     if result["best_c5"]:
         logger.info(f"Best C5: {result['best_c5']:.6f}, Mean: {result['mean_c5']:.6f}")
     logger.info(f"pass@1: {result.get('pass@1', 0):.3f}")
