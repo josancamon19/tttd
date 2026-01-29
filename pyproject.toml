@@ -10,6 +10,7 @@ dependencies = [
     "python-dotenv",
     "tinker>=0.9.0",
     "tinker-cookbook",
+    "wandb>=0.24.0",
 ]
 
 [project.scripts]

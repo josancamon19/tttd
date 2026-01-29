@@ -17,47 +17,33 @@ logger = logging.getLogger(__name__)
 
 @chz.chz
 class TrainConfig:
-    """Training configuration for Erdős TTT.
-
-    Defaults match TTT-Discover repo settings for Erdős minimum overlap.
-    """
-
-    # Model settings
-    model_name: str = "Qwen/Qwen3-8B"
+    model_name: str = "openai/gpt-oss-20b"
     learning_rate: float = 4e-5
-    max_tokens: int = 26000  # TTT-Discover uses 26000
+    max_tokens: int = 26000
     lora_rank: int = 32
     temperature: float = 1.0
-
-    # Dataset settings
-    num_batches: int = 50  # TTT-Discover num_epochs=50
-    batch_size: int = 64  # TTT-Discover groups_per_batch=64
-    group_size: int = 8  # TTT-Discover group_size=8
-    timeout: int = 1100  # TTT-Discover eval_timeout=1100 for Erdős
-
-    # Sampler settings
-    sampler_type: str = "greedy"  # TTT-Discover uses greedy by default
+    num_steps: int = 50
+    batch_size: int = 64
+    group_size: int = 8
+    timeout: int = 1100
+    sampler_type: str = "greedy"
     puct_c: float = 1.0
-    max_buffer_size: int = 1000  # TTT-Discover uses 1000
+    max_buffer_size: int = 1000
     topk_children: int = 2
-
-    # Training settings
     loss_fn: Literal["importance_sampling", "ppo"] = "importance_sampling"
     num_substeps: int = 1
     kl_penalty_coef: float = 0.0
-    eval_every: int = 3  # TTT-Discover default; runs evaluators every N steps
+    eval_every: int = 3
     save_every: int = 5
     remove_constant_reward_groups: bool = True
-
-    # Advantage estimation - TTT-Discover uses entropic with beta=2.0
     adv_estimator: Literal["mean_baseline", "entropic", "entropic_adaptive_beta"] = (
-        "entropic"
+        "entropic_adaptive_beta"
     )
-    adv_estimator_beta: float = 2.0  # TTT-Discover uses beta=2.0
-
-    # Output settings
+    adv_estimator_beta: float = 2.0
     output_dir: str = "./outputs"
-    verbose: bool = False  # Log all rollouts to output_dir
+    verbose: bool = False
+    wandb_project: str | None = "tttd-erdos"
+    wandb_name: str | None = None
 
 
 def main():
@@ -86,7 +72,7 @@ async def _async_main(config: TrainConfig):
 
     # Create dataset builder
     dataset_builder = ErdosDatasetBuilder(
-        num_batches=config.num_batches,
+        num_batches=config.num_steps,
         batch_size=config.batch_size,
         group_size=config.group_size,
         model_name_for_tokenizer=config.model_name,
@@ -114,6 +100,8 @@ async def _async_main(config: TrainConfig):
         eval_every=config.eval_every,
         save_every=config.save_every,
         remove_constant_reward_groups=config.remove_constant_reward_groups,
+        wandb_project=config.wandb_project,
+        wandb_name=config.wandb_name,
     )
 
     # Monkey-patch tinker_cookbook's compute_advantages to use our custom estimator

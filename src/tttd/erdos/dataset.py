@@ -19,6 +19,43 @@ from tttd.erdos.env import ErdosEnvGroupBuilder
 from tttd.sampler import ErdosState, PUCTSampler, GreedySampler, StateSampler
 
 
+class ErdosEvalDataset(RLDataset):
+    """Simple eval dataset - fresh random states with no prior context.
+
+    Used to measure if the model can produce good solutions from scratch.
+    """
+
+    def __init__(
+        self,
+        renderer: Renderer,
+        num_batches: int,
+        group_size: int,
+        timeout: int,
+    ):
+        self._renderer = renderer
+        self._num_batches = num_batches
+        self._group_size = group_size
+        self._timeout = timeout
+
+    def get_batch(self, index: int) -> Sequence[EnvGroupBuilder]:
+        from tttd.sampler import create_initial_erdos_state
+
+        # Single fresh state per eval batch, no prior code shown
+        fresh_state = create_initial_erdos_state()
+        return [
+            ErdosEnvGroupBuilder(
+                renderer=self._renderer,
+                group_size=self._group_size,
+                timeout=self._timeout,
+                parent_state=fresh_state,
+                hide_code=True,  # Don't show any prior code
+            )
+        ]
+
+    def __len__(self) -> int:
+        return self._num_batches
+
+
 class ErdosDataset(RLDataset):
     """Dataset that produces batches of ErdosEnvGroupBuilder instances.
 
@@ -125,6 +162,9 @@ class ErdosDatasetBuilder(RLDatasetBuilder):
     max_buffer_size: int = 500
     topk_children: int = 2
 
+    # Eval config
+    eval_batches: int = 1  # Number of eval batches (fresh starts)
+
     async def __call__(self) -> tuple[RLDataset, RLDataset | None]:
         renderer_name = self.renderer_name
         if not renderer_name:
@@ -159,4 +199,12 @@ class ErdosDatasetBuilder(RLDatasetBuilder):
             sampler=sampler,
         )
 
-        return dataset, None
+        # Eval dataset: fresh starts, no prior code context
+        eval_dataset = ErdosEvalDataset(
+            renderer=renderer,
+            num_batches=self.eval_batches,
+            group_size=self.group_size,
+            timeout=self.timeout,
+        )
+
+        return dataset, eval_dataset
