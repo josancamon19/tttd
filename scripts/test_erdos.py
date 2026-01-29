@@ -248,6 +248,65 @@ def run():
     logger.info("")
 
 
+def test_puct_sampler():
+    """Test the PUCT sampler."""
+    logger.info("=== Testing PUCT Sampler ===")
+
+    import tempfile
+    from tttd.sampler import PUCTSampler, ErdosState, create_initial_erdos_state
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        sampler = PUCTSampler(
+            log_path=tmpdir,
+            max_buffer_size=10,
+            puct_c=1.0,
+        )
+
+        # Sample initial states
+        states = sampler.sample_states(3)
+        logger.info(f"Sampled {len(states)} initial states")
+        assert len(states) == 3
+        for s in states:
+            assert s.h_values is not None
+            logger.info(f"  State {s.id[:8]}... value={s.value:.4f}, c5_bound={s.c5_bound:.4f}")
+
+        # Simulate rollout: create child states
+        parent = states[0]
+        children = []
+        for i in range(3):
+            child = ErdosState(
+                timestep=0,
+                value=-0.4 + i * 0.05,  # Varying quality
+                c5_bound=0.4 - i * 0.05,
+                h_values=[0.5] * 100,
+                code=f"# solution {i}",
+            )
+            children.append(child)
+
+        # Update sampler
+        sampler.update_states(children, [parent] * 3, step=0)
+        logger.info(f"Updated sampler with {len(children)} children")
+
+        # Sample again - should prefer better states
+        states2 = sampler.sample_states(2)
+        logger.info(f"After update, sampled {len(states2)} states")
+        for s in states2:
+            val_str = f"{s.value:.4f}" if s.value is not None else "None"
+            logger.info(f"  State {s.id[:8]}... value={val_str}")
+
+        # Check stats
+        stats = sampler.get_stats()
+        logger.info(f"Sampler stats: buffer_size={stats['puct/buffer_size']}, T={stats['puct/T']}")
+        assert stats["puct/buffer_size"] > 1
+        assert stats["puct/T"] >= 1
+
+        # Test save/load
+        sampler.flush(step=1)
+        logger.info("Saved sampler state")
+
+    logger.info("✓ PUCT Sampler works\n")
+
+
 def test_advantages():
     """Test the advantage estimators."""
     logger.info("=== Testing Advantage Estimators ===")
@@ -310,6 +369,7 @@ async def main():
     test_verifier()
     test_executor()
     test_baseline_solution()
+    test_puct_sampler()
     test_advantages()
 
     # Async tests
