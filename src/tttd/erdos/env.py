@@ -181,8 +181,6 @@ class ErdosEnv(Env):
             metrics["format"] = 0
             metrics["correct"] = 0
             metrics["correctness"] = 0.0
-            metrics["c5_bound"] = None
-            metrics["performance"] = None
             metrics["score"] = 0.0
             return StepResult(
                 reward=0.0,
@@ -226,8 +224,6 @@ class ErdosEnv(Env):
         else:
             metrics["correct"] = 0
             metrics["correctness"] = 0.0
-            metrics["c5_bound"] = None
-            metrics["performance"] = None
             metrics["score"] = 0.0
             reward = 0.0
             self._child_state = None

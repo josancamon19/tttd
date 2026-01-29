@@ -11,8 +11,11 @@ import tinker_cookbook.rl.data_processing as data_processing
 from tttd.advantages import compute_advantages as custom_compute_advantages
 from tttd.erdos.dataset import ErdosDatasetBuilder
 from tttd.erdos.executor import shutdown_executor
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+load_dotenv()
 
 
 @chz.chz
@@ -46,24 +49,6 @@ class TrainConfig:
     wandb_name: str | None = None
 
 
-def main():
-    """Entry point - parse args with chz and run training."""
-    chz.entrypoint(run_training)
-
-
-def run_training(config: TrainConfig):
-    """Run training with the given configuration."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s: %(message)s",
-    )
-
-    logger.info("Starting Erdős TTT training")
-    logger.info(f"Config: {config}")
-
-    asyncio.run(_async_main(config))
-
-
 async def _async_main(config: TrainConfig):
     # Create output directory
     output_dir = Path(config.output_dir)
@@ -83,8 +68,6 @@ async def _async_main(config: TrainConfig):
         max_buffer_size=config.max_buffer_size,
         topk_children=config.topk_children,
     )
-
-    dataset, _ = await dataset_builder()
 
     cfg = train.Config(
         model_name=config.model_name,
@@ -117,6 +100,17 @@ async def _async_main(config: TrainConfig):
         await train.main(cfg)
     finally:
         shutdown_executor()
+
+
+def main():
+    config = chz.entrypoint(TrainConfig)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+    )
+    logger.info("Starting Erdős TTT training")
+    logger.info(f"Config: {config}")
+    asyncio.run(_async_main(config))
 
 
 if __name__ == "__main__":
