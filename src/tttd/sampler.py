@@ -20,10 +20,7 @@ from typing import Any
 import numpy as np
 
 # Erdős-specific constants (from TTT-Discover)
-MAX_ERDOS_CONSTRUCTION_LEN = 1000  # Max h_values array length
-MIN_ERDOS_CONSTRUCTION_LEN = (
-    20  # Min h_values array length (allow smaller than initial)
-)
+MAX_ERDOS_CONSTRUCTION_LEN = 1000  # Original: 1000
 
 
 @dataclass
@@ -363,10 +360,8 @@ class PUCTSampler(StateSampler):
         while len(picked) < num_states:
             picked.append(create_initial_erdos_state(seed=int(self._rng.integers(0, 2**31))))
 
-        # Refresh random construction for initial states (so re-sampling explores new starting points)
-        for s in picked:
-            if s.id in initial_ids:
-                self._refresh_random_construction(s)
+        # NOTE: Original only refreshes initial states for ac1/ac2, NOT erdos
+        # So we don't call _refresh_random_construction here
 
         self._last_sampled_states = picked
         return picked
@@ -435,12 +430,8 @@ class PUCTSampler(StateSampler):
             if child.value is None or child.h_values is None:
                 continue
 
-            # Validate construction length
-            if not (
-                MIN_ERDOS_CONSTRUCTION_LEN
-                <= len(child.h_values)
-                <= MAX_ERDOS_CONSTRUCTION_LEN
-            ):
+            # Validate construction length (original only checks max for Erdős)
+            if len(child.h_values) > MAX_ERDOS_CONSTRUCTION_LEN:
                 continue
 
             key = tuple(child.h_values)
@@ -585,15 +576,15 @@ class GreedySampler(StateSampler):
         if not self._states:
             return [create_initial_erdos_state(seed=self.seed + i) for i in range(num_states)]
 
+        # Epsilon-greedy: with prob epsilon, sample random; otherwise cycle through top states
+        # Original cycles: self._top_states[i % len(self._top_states)]
         result = []
-        for _ in range(num_states):
-            if self._rng.random() < self.epsilon and len(self._states) > 1:
+        for i in range(num_states):
+            if self.epsilon > 0 and self._rng.random() < self.epsilon and len(self._states) > 1:
                 result.append(self._rng.choice(self._states))
             else:
-                best = max(
-                    self._states, key=lambda s: s.value if s.value else float("-inf")
-                )
-                result.append(best)
+                # Cycle through sorted states (they're already sorted by value desc)
+                result.append(self._states[i % len(self._states)])
         return result
 
     def _save_path(self, step: int) -> str:
@@ -654,14 +645,18 @@ class GreedySampler(StateSampler):
 
         with self._lock:
             for child, parent in zip(states, parent_states):
-                if child.value is not None:
-                    child.parent_values = (
-                        [parent.value] + parent.parent_values if parent.value else []
-                    )
-                    child.parents = [
-                        {"id": parent.id, "timestep": parent.timestep}
-                    ] + parent.parents
-                    self._states.append(child)
+                if child.value is None or child.h_values is None:
+                    continue
+                # Validate construction length (original only checks max for Erdős)
+                if len(child.h_values) > MAX_ERDOS_CONSTRUCTION_LEN:
+                    continue
+                child.parent_values = (
+                    [parent.value] + parent.parent_values if parent.value else []
+                )
+                child.parents = [
+                    {"id": parent.id, "timestep": parent.timestep}
+                ] + parent.parents
+                self._states.append(child)
 
             # Keep top states
             self._states.sort(
