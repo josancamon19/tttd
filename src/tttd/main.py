@@ -6,17 +6,66 @@ from pathlib import Path
 from typing import Literal
 
 import chz
+import tinker
 from dotenv import load_dotenv
 from tinker_cookbook.rl import train
+from tinker_cookbook.rl.train import (
+    do_group_rollout,
+    TinkerTokenCompleter,
+    TrajectoryGroup,
+    all_same,
+    logtree,
+    scope,
+)
+from tinker_cookbook.rl.types import EnvGroupBuilder
 import tinker_cookbook.rl.data_processing as data_processing
 
 from tttd.advantages import compute_advantages as custom_compute_advantages
+from tttd.completers import TwoPhaseTokenCompleter
 from tttd.erdos.dataset import ErdosDatasetBuilder
 from tttd.erdos.executor import shutdown_executor
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
+# Global config for two-phase sampling (set during training setup)
+_two_phase_config: dict = {"enabled": False, "phase1_max_tokens": 26000, "tokenizer": None}
+
+
+def _create_patched_rollout_fn():
+    """Create a patched version of do_group_rollout_and_filter_constant_reward that supports two-phase sampling."""
+
+    @scope
+    async def patched_do_group_rollout_and_filter_constant_reward(
+        sampling_client: tinker.SamplingClient,
+        env_group_builder: EnvGroupBuilder,
+        max_tokens: int,
+        temperature: float,
+        do_remove_constant_reward_groups: bool,
+        enable_logging: bool = True,
+    ) -> TrajectoryGroup | None:
+        # Use two-phase sampling if enabled and tokenizer is available
+        if _two_phase_config["enabled"] and _two_phase_config["tokenizer"] is not None:
+            policy = TwoPhaseTokenCompleter(
+                sampling_client=sampling_client,
+                tokenizer=_two_phase_config["tokenizer"],
+                phase1_max_tokens=_two_phase_config["phase1_max_tokens"],
+                temperature=temperature,
+            )
+        else:
+            policy = TinkerTokenCompleter(sampling_client, max_tokens=max_tokens, temperature=temperature)
+
+        with logtree.optional_enable_logging(enable_logging):
+            trajectory_group = await do_group_rollout(env_group_builder, policy)
+
+        # Remove if all trajectories have the same reward
+        if do_remove_constant_reward_groups and all_same(trajectory_group.get_total_rewards()):
+            return None
+        else:
+            return trajectory_group
+
+    return patched_do_group_rollout_and_filter_constant_reward
 
 
 @chz.chz
@@ -115,18 +164,26 @@ async def _async_main(config: TrainConfig):
         load_checkpoint_path=config.load_checkpoint_path,
         wandb_project=config.wandb_project,
         wandb_name=wandb_name,
-        two_phase_sampling=config.two_phase_sampling,
-        phase1_max_tokens=config.phase1_max_tokens,
     )
 
     # Monkey-patch tinker_cookbook's compute_advantages to use our custom estimator
-    # This injects TTT-Discover's entropic advantages without modifying the library
     logger.info(f"Using advantage estimator: {config.adv_estimator}")
     data_processing.compute_advantages = partial(
         custom_compute_advantages,
         estimator=config.adv_estimator,
         beta=config.adv_estimator_beta,
     )
+
+    # Setup two-phase sampling if enabled
+    if config.two_phase_sampling:
+        from tinker_cookbook.tokenizer_utils import get_tokenizer
+        tokenizer = get_tokenizer(config.model_name)
+        _two_phase_config["enabled"] = True
+        _two_phase_config["phase1_max_tokens"] = config.phase1_max_tokens
+        _two_phase_config["tokenizer"] = tokenizer
+        # Monkey-patch the rollout function to use two-phase sampling
+        train.do_group_rollout_and_filter_constant_reward = _create_patched_rollout_fn()
+        logger.info(f"Two-phase sampling enabled: phase1_max_tokens={config.phase1_max_tokens}")
 
     try:
         await train.main(cfg)
